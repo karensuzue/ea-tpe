@@ -23,7 +23,7 @@ def main():
                         help = "Whether offspring replace existing individuals in the population." )
     parser.add_argument('--dataset', type = int, choices = [0, 1, 2], default = 0, 
                         help = "Index of the dataset to use for hyperparameter tuning.")
-    parser.add_argument("--logdir", type = str, default = "results/",
+    parser.add_argument("--logdir", type = str, default = "results",
                         help = "Directory to store logs and results.")
     args = parser.parse_args()
 

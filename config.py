@@ -35,7 +35,7 @@ class Config:
                  mut_rate: float = 0.1,
                  replacement: bool = True,
                  evaluations: int = 500, 
-                 logdir: str = 'results/'):
+                 logdir: str = 'results'):
         
         self.seed = seed
         self.generations = generations
@@ -58,6 +58,9 @@ class Config:
         # This should affect the entire system
         random.seed(seed)
         np.random.seed(seed)
+    
+    def get_seed(self) -> int:
+        return self.seed
 
     def get_replacement_state(self) -> bool:
         """ See whether the replacement strategy is enabled. """

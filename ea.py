@@ -138,11 +138,12 @@ class EA:
         self.init_population()
         self.evaluate_population()
         for gen in range(generations):
-            self.logger.log(gen, self.population)
+            self.logger.log_generation(gen, self.population)
             parents = self.select_parents()
             self.mate_population(parents)
 
         # For the final generation
-        self.logger.log(generations, self.population)
-        self.logger.save()
+        self.logger.log_generation(generations, self.population)
+        self.logger.log_best(self.population, self.config, "EA")
+        self.logger.save(self.config, "EA")
 
