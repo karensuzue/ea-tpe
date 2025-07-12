@@ -29,6 +29,7 @@ class Config:
                  dataset_idx: int = 0, 
                  seed: int = 0, 
                  generations: int = 50, 
+                 num_child: int = 25,
                  pop_size: int = 50, 
                  tour_size: int = 5,
                  mut_rate: float = 0.1,
@@ -38,6 +39,7 @@ class Config:
         
         self.seed = seed
         self.generations = generations
+        self.num_child = num_child
         self.pop_size = pop_size
         self.tour_size = tour_size
         self.mut_rate = mut_rate
@@ -69,6 +71,9 @@ class Config:
         """ Get the number of generations. """
         return self.generations
     
+    def get_num_child(self) -> int:
+        return self.num_child
+    
     def get_pop_size(self) -> int:
         """ Get population size. """
         return self.pop_size
@@ -80,7 +85,6 @@ class Config:
     def get_mut_rate(self) -> float:
         """ Get mutation rate. """
         return self.mut_rate
-    
     
     def get_param_space(self) -> ParamSpace:
         """ Get parameter names and specifications. """
@@ -121,6 +125,8 @@ class Config:
         # Make sure dataset splits use the same seed across all experiments/replicates
         return train_test_split(X, y, test_size = 0.2, random_state = 0)
 
+    def get_logdir(self) -> str:
+        return self.logdir
 
 
     # def save_results():

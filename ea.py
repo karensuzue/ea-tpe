@@ -1,7 +1,8 @@
 import numpy as np
 import random
 from config import ParamSpace, Config
-from typing import Tuple, Dict, Any, List
+from logger import Logger
+from typing import List
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 
@@ -34,9 +35,13 @@ class EA:
     """
     EA Solver.
     """
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, logger: Logger):
         self.config = config
+        self.logger = logger
+
         self.population: List[Organism] = []
+        
+        self.X_train, self.X_test, self.y_train, self.y_test = self.config.load_dataset()
 
     def init_population(self) -> None:
         self.population.clear() # just in case
@@ -57,24 +62,25 @@ class EA:
             self.population.append(organism)
         assert (len(self.population) == pop_size)
 
-    def evaluate_org(self, org: Organism, X_train: np.ndarray, y_train: np.ndarray) -> None:
+    def evaluate_org(self, org: Organism) -> None:
         # Must maintain the same seed/random_state across experiments 
         model = RandomForestClassifier(**org.get_genome(), random_state=0)
         # Inverted, as TPE expects minimization
-        score = -1 * cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy').mean() 
+        score = -1 * cross_val_score(model, self.X_train, self.y_train, cv=5, scoring='accuracy').mean() 
         org.set_fitness(score)
 
-    def evaluate_population(self, X_train: np.ndarray, y_train: np.ndarray) -> None:
+    def evaluate_population(self) -> None:
         for org in self.population:
-            self.evaluate_org(org, X_train, y_train)
+            self.evaluate_org(org)
 
     def select_parents(self) -> List[Organism]:
         """ Tournament selection. """
         tour_size = self.config.get_tour_size()
+        num_child = self.config.get_num_child()
         parents = []
         # Assume organisms are evaluated
         fitnesses = np.array([org.get_fitness() for org in self.population])
-        for _ in range(len(self.population)):
+        for _ in range(num_child): # for now, the number of parents selected = number of offspring produced (mutation only)
             # Randomly choose a tour_size number of indices
             indices = np.random.choice(len(self.population), tour_size, replace=False)
             # Extract fitnesses at the chosen indices
@@ -108,7 +114,9 @@ class EA:
         mut_rate = self.config.get_mut_rate()
         for org in parents:
             child = self.mutate_org(org, mut_rate)
+            self.evaluate_org(child) # to avoid unnecessary evaluations in the main loop
             offspring.append(child)
+        assert(self.config.get_num_child() == len(offspring))
 
         # Place offspring back in population
         if self.config.get_replacement_state():
@@ -121,4 +129,20 @@ class EA:
             assert(len(self.population) == self.config.get_pop_size())
         else:
             self.population += offspring
+
+    # Run "default" EA 
+    def evolve(self) -> None:
+        generations = self.config.get_generations()
+        logdir = self.config.get_logdir()
+
+        self.init_population()
+        self.evaluate_population()
+        for gen in range(generations):
+            self.logger.log(gen, self.population)
+            parents = self.select_parents()
+            self.mate_population(parents)
+
+        # For the final generation
+        self.logger.log(generations, self.population)
+        self.logger.save()
 
