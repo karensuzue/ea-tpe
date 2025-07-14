@@ -2,6 +2,7 @@ import argparse
 from config import Config
 from logger import Logger
 from ea import EA
+from tpe import TPE
 
 def main():
     parser = argparse.ArgumentParser()
@@ -50,11 +51,11 @@ def main():
         logdir = args.logdir
     )
 
-    ea_solver = EA(config, logger)
-    ea_solver.evolve()
+    # ea_solver = EA(config, logger)
+    # ea_solver.evolve()
 
-    # tpe_solver = TPE(config, logger)
-    # tpe_solver.optimize()
+    tpe_solver = TPE(config, logger)
+    tpe_solver.optimize()
 
     # eatpe_solver = EATPE(config, logger)
     # eatpe_solver.evolve()

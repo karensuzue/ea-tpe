@@ -119,7 +119,8 @@ class TPE:
 
         self.multi_l = None # stores fitted distributions
         self.multi_g = None 
-        self.cat_l, self.cat_g = {}
+        self.cat_l = {}
+        self.cat_g = {}
 
     def init_samples(self) -> None:
         """
@@ -295,8 +296,10 @@ class TPE:
         # 'np.argsort' gives indices that would sort scores in ascending order
         # '::-1' reverses that, higher EI is better
         # ':k' selects the top-k indices
-        indices = np.argsort(scores)[::-1][:k]
-        return [candidates[i] for i in indices], scores[indices]
+        sorted_indices = np.argsort(scores)[::-1][:k]
+        top_candidates = [candidates[int(i)] for i in sorted_indices]
+        top_scores = scores[sorted_indices]
+        return top_candidates, top_scores
 
     def optimize(self):
         """
@@ -308,7 +311,12 @@ class TPE:
             self.evaluate_org(org)
 
         eval_count = self.config.get_evaluations()
-        for _ in range(eval_count - len(self.samples)):
+
+        init_sample_size = len(self.samples)
+        for eval in range(eval_count - init_sample_size):
+            # Log best, average, and median objective values in the current sample set
+            self.logger.log_generation(eval, self.samples)
+
             # Split sample set into 'good' and 'bad' groups
             good_samples, bad_samples = self.split_samples()
         
@@ -317,9 +325,23 @@ class TPE:
             # Randomly generate new candidates
             candidates = self.random_samples()
             ei = self.expected_improvement(candidates)
-            best_org, best_score = self.suggest(candidates)
+            best_org, _ = self.suggest(candidates)
 
-            self.samples.append(best_org)
+            # 'best_org' maybe contain more than 1 organism
+            for org in best_org:
+                self.evaluate_org(org)
+
+            # Update sample set
+            self.samples += best_org
+
+
+
+            # Log expected improvement over time
+        
+        # Log the best observed hyperparameter configuration across all iterations
+        self.logger.log_best(self.samples, self.config, "TPE")
+        self.logger.save(self.config, "TPE")
+
 
 
 
