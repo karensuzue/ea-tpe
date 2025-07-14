@@ -170,6 +170,11 @@ class TPE:
             samples.append(Organism(genome))
         return samples
 
+    def set_samples(self, samples: List[Organism]) -> None:
+        """
+        """
+        self.samples = samples
+
     def evaluate_org(self, org: Organism) -> None:
         """
         Evaluate the fitness of an organism using cross-validated accuracy.
@@ -336,7 +341,7 @@ class TPE:
 
 
 
-            # Log expected improvement over time
+            # Log average and best expected improvement over time
         
         # Log the best observed hyperparameter configuration across all iterations
         self.logger.log_best(self.samples, self.config, "TPE")

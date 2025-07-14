@@ -19,6 +19,13 @@ class EA:
         
         self.X_train, self.X_test, self.y_train, self.y_test = self.config.load_dataset()
 
+    def get_population(self) -> List[Organism]:
+        return self.population
+    
+    def append_population(self, orgs: List[Organism]) -> None:
+        # 'orgs' may contain 1 or more organisms
+        self.population += orgs
+    
     def init_population(self) -> None:
         self.population.clear() # just in case
 
@@ -109,7 +116,6 @@ class EA:
     # Run "default" EA 
     def evolve(self) -> None:
         generations = self.config.get_generations()
-        logdir = self.config.get_logdir()
 
         self.init_population()
         self.evaluate_population()
