@@ -339,8 +339,6 @@ class TPE:
             # Update sample set
             self.samples += best_org
 
-
-
             # Log average and best expected improvement over time
         
         # Log the best observed hyperparameter configuration across all iterations

@@ -12,6 +12,11 @@ class EATPE:
         self.ea = EA(config, logger) 
         self.tpe = TPE(config, logger)
     
+    
+    def suggest(self, candidates):
+        k = self.config.get_num_child()
+        return self.tpe.suggest(candidates, k)
+
     def evolve(self):
         # Get the number of generations
         generations = self.config.get_generations()
@@ -29,7 +34,7 @@ class EATPE:
             self.tpe.set_samples(self.ea.get_population())
 
             # Split sample set into 'good' and 'bad' groups
-            good_samples, bad_samples = self.split_samples()
+            good_samples, bad_samples = self.tpe.split_samples()
 
             # Fit TPE
             self.tpe.fit(good_samples, bad_samples)
@@ -39,7 +44,7 @@ class EATPE:
             offspring = []
             mut_rate = self.config.get_mut_rate()
             for org in parents:
-                child = self.mutate_org(org, mut_rate)
+                child = self.ea.mutate_org(org, mut_rate)
                 # self.ea.evaluate_org(child) # to avoid unnecessary evaluations in the main loop
                 offspring.append(child)
 
@@ -51,9 +56,9 @@ class EATPE:
             self.ea.append_population(best_org)
 
         # For the final generation
-        self.logger.log_generation(generations, self.population)
-        self.logger.log_best(self.population, self.config, "EA")
-        self.logger.save(self.config, "EA")
+        self.logger.log_generation(generations, self.ea.population)
+        self.logger.log_best(self.ea.population, self.config, "EA+TPE")
+        self.logger.save(self.config, "EA+TPE")
 
 
 

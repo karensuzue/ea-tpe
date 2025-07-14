@@ -3,6 +3,7 @@ from config import Config
 from logger import Logger
 from ea import EA
 from tpe import TPE
+from eatpe import EATPE
 
 def main():
     parser = argparse.ArgumentParser()
@@ -54,11 +55,11 @@ def main():
     # ea_solver = EA(config, logger)
     # ea_solver.evolve()
 
-    tpe_solver = TPE(config, logger)
-    tpe_solver.optimize()
+    # tpe_solver = TPE(config, logger)
+    # tpe_solver.optimize()
 
-    # eatpe_solver = EATPE(config, logger)
-    # eatpe_solver.evolve()
+    eatpe_solver = EATPE(config, logger)
+    eatpe_solver.evolve()
 
 
 if __name__ == "__main__":

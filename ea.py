@@ -23,8 +23,18 @@ class EA:
         return self.population
     
     def append_population(self, orgs: List[Organism]) -> None:
-        # 'orgs' may contain 1 or more organisms
-        self.population += orgs
+        # Place offspring back in population
+        if self.config.get_replacement_state():
+            # Sort in ascending order, lowest fitness is better
+            self.population.sort(key=lambda o: o.get_fitness())  
+            # Remove lowest performing individuals in the population
+            self.population = self.population[:len(self.population) - len(orgs)]
+            # Replace missing individuals with offspring
+            self.population += orgs
+            assert(len(self.population) == self.config.get_pop_size())
+        else:
+            self.population += orgs
+
     
     def init_population(self) -> None:
         self.population.clear() # just in case
