@@ -53,9 +53,11 @@ def main():
     ea_solver = EA(config, logger)
     ea_solver.evolve()
 
-    #best = run_eatpe(search_space, evaluate, generations=args.generations, pop_size=args.pop_size)
-    #print("Best configuration found:")
-    #print(best)
+    # tpe_solver = TPE(config, logger)
+    # tpe_solver.optimize()
+
+    # eatpe_solver = EATPE(config, logger)
+    # eatpe_solver.evolve()
 
 
 if __name__ == "__main__":

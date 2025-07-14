@@ -1,35 +1,11 @@
 import numpy as np
 import random
-from config import ParamSpace, Config
+from config import Config
 from logger import Logger
+from organism import Organism
 from typing import List
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
-
-class Organism:
-    """
-    A set of hyperparameters to be evolved.
-    """
-    def __init__(self, genome: ParamSpace):
-        self.fitness: float | None = None
-        self.genome = genome
-
-    def __repr__(self):
-        return f"Organism(genome={self.genome}, fitness={self.fitness})"
-    
-    def set_fitness(self, f: float) -> None:
-        self.fitness = f
-    
-    def get_fitness(self) -> float:
-        if self.fitness is None:
-            raise ValueError("Organism hasn't been evaluated.")
-        return self.fitness
-
-    def set_genome(self, g: ParamSpace) -> None:
-        self.genome = g
-    
-    def get_genome(self) -> ParamSpace:
-        return self.genome
 
 class EA:
     """

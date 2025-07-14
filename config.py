@@ -97,6 +97,18 @@ class Config:
         """ Get parameter names. """
         return self.param_names
     
+    def get_num_param_names(self) -> List[str]:
+        return [n for n, info in self.param_space.items() 
+                if info['type'] == "int" or info['type'] == "float"]
+    
+    def get_cat_param_names(self) -> List[str]:
+        return [n for n, info in self.param_space.items()
+                if info['type'] == "cat"]
+    
+    def get_param_type(self, param_name) -> str:
+        # This should automatically raise a KeyError if 'param_name' does not exist
+        return self.param_space[param_name]['type']
+    
     def add_param(self, name: str, bounds: Tuple[Any, Any], type: Literal["int", "float", "cat"]) -> None:
         """ Adds a new parameter. """
         self.param_space[name] = {'bounds': bounds, 'type': type}
@@ -104,6 +116,10 @@ class Config:
     
     def get_dataset_id(self) -> int:
         """ Returns the ID of the chosen dataset. """
+        return self.dataset_idx
+    
+    def get_dataset_name(self) -> int:
+        """ Returns the OpenML ID of the chosen dataset. """
         return self.dataset_ids[self.dataset_idx]
 
     def add_dataset_id(self, id: int) -> None:
