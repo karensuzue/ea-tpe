@@ -340,7 +340,7 @@ class TPE:
 
             # Randomly generate new candidates
             # TODO: Switch to drawing from the 'good' numeric and categorical dist. independently
-            candidates = self.random_samples()
+            candidates = self.random_samples(self.config.get_num_child() * 2) # should be more than the number of chosen candidates
             # Select the top "num_child" candidates for evaluation on the true objective
             best_org, ei_scores = self.suggest_num_child(candidates)
 

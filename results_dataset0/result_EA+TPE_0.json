@@ -1,0 +1,11 @@
+{
+  "dataset": 0,
+  "replicate": 0,
+  "evaluations": 1000,
+  "method": "EA+TPE",
+  "final_cv_accuracy_score": -0.7658963585434173,
+  "params": {
+    "n_estimators": 70,
+    "criterion": "entropy"
+  }
+}

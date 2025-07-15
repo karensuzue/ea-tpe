@@ -1,0 +1,11 @@
+{
+  "dataset": 0,
+  "replicate": 0,
+  "evaluations": 1000,
+  "method": "TPE",
+  "final_cv_accuracy_score": -0.7659103641456582,
+  "params": {
+    "n_estimators": 76,
+    "criterion": "log_loss"
+  }
+}
