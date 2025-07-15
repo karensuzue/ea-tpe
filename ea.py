@@ -66,14 +66,14 @@ class EA:
         for org in self.population:
             self.evaluate_org(org)
 
-    def select_parents(self) -> List[Organism]:
+    def select_parents(self, num_parents) -> List[Organism]:
         """ Tournament selection. """
         tour_size = self.config.get_tour_size()
-        num_child = self.config.get_num_child()
+        # num_child = self.config.get_num_child()
         parents = []
         # Assume organisms are evaluated
         fitnesses = np.array([org.get_fitness() for org in self.population])
-        for _ in range(num_child): # for now, the number of parents selected = number of offspring produced (mutation only)
+        for _ in range(num_parents): 
             # Randomly choose a tour_size number of indices
             indices = np.random.choice(len(self.population), tour_size, replace=False)
             # Extract fitnesses at the chosen indices
@@ -130,12 +130,12 @@ class EA:
         self.init_population()
         self.evaluate_population()
         for gen in range(generations):
-            self.logger.log_generation(gen, self.population)
-            parents = self.select_parents()
-            self.mate_population(parents)
+            self.logger.log_generation(gen, self.population, "EA")
+            parents = self.select_parents(self.config.get_num_child()) # select 'num_child' parents
+            self.mate_population(parents) # produce and evaluate 'num_child' offspring
 
         # For the final generation
-        self.logger.log_generation(generations, self.population)
+        self.logger.log_generation(generations, self.population, "EA")
         self.logger.log_best(self.population, self.config, "EA")
         self.logger.save(self.config, "EA")
 

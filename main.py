@@ -10,7 +10,7 @@ def main():
     parser.add_argument('--seed', type = int, default = 0,
                         help = "Random seed for reproducibility.")
     parser.add_argument('--evaluations', type = int, default = 500,
-                        help = "Total number of evaluations of the objective function (overrides generations if set).")
+                        help = "Total number of evaluations of the objective function.")
     # parser.add_argument("--generations", type = int, default = 50,
                         # help = "Number of generations (overriden if evaluations is set).")
     parser.add_argument('--num_child', type=int, default=25,
@@ -32,20 +32,22 @@ def main():
     config = Config(
         dataset_idx = args.dataset,
         seed = args.seed,
-        # generations = args.generations,
-        # Calculate the number of generations from evaluations or fitness computations
-        # We assume that each evaluation happens once - however, they are not "unique"
-        # Duplicates of previously evaluated genomes can reoccur in the population
-        # If caching is involved, the number of actual evaluations will be less than the number inputted here
-        generations = args.evaluations // args.pop_size if args.replacement is True 
-                        else (args.evaluations - args.pop_size) // args.num_child,
+        # Estimate the number of generations from the total evaluation budget.
+        # We assume one fitness evaluation per organism (no caching/reoccurrences may occur).
+        # Only 'num_child' individuals are evaluated each generation.
+        # The first generation (initial population) always evaluates 'pop_size' individuals.
+        generations = (args.evaluations - args.pop_size) // args.num_child, 
+            # evaluations = initial population size + number of children * number of generations
+        # 'num_child' is the number of offspring produced each iteration
         num_child = args.num_child,
         pop_size = args.pop_size,
         tour_size = args.tour_size,
         mut_rate  =  args.mut_rate,
         evaluations = args.evaluations,
+        # If 'replacement' is True, 'num_child' offspring replace part of the population.
+        # 'num_child' can be made equal to the population_size, which would effectively
+        # create a full new population each generation. 
         replacement = args.replacement,
-        # logdir = args.logdir # move this to Logger
     )
 
     logger = Logger(

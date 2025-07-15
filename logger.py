@@ -12,11 +12,19 @@ class Logger:
         self.best_org = None
         self.best_org_data = {}
 
-    def log_generation(self, generation: int, population: List[Organism]) -> None:
+        self.ei_history = []
+
+    def log_generation(self, generation: int, population: List[Organism], method: str) -> None:
         best = min(population, key=lambda o: o.get_fitness())
         avg = np.mean([o.get_fitness() for o in population])
         median = np.median([o.get_fitness() for o in population])
-        self.history.append((generation, best.get_fitness(), avg, median))
+        std = np.std([o.get_fitness() for o in population])
+        # if method == "TPE" or method == "EA+TPE":
+        #     ei_best = max(population, key=lambda o: o.get_ei())
+        #     ei_avg = np.mean([o.get_ei() for o in population])
+        #     self.history.append([generation, best.get_fitness(), avg, median, ei_best, ei_avg])
+        # else:
+        self.history.append((generation, best.get_fitness(), avg, median, std))
         print(f"[LOG] Generation {generation}: {len(population)} organisms")
     
     def log_best(self, population: List[Organism], config: Config, method: str) -> None:
@@ -31,16 +39,28 @@ class Logger:
             "final_cv_accuracy_score": self.best_org.get_fitness(),
             "params": self.best_org.get_genome()
         }
+    
+    def log_ei(self, generation: int, ei_scores: np.ndarray):
+        avg_ei = np.mean(ei_scores)
+        max_ei = np.max(ei_scores)
+        std_ei = np.std(ei_scores)
+        self.ei_history.append((generation, avg_ei, max_ei, std_ei))
 
     def save(self, config: Config, method: str) -> None:
         dataset = config.get_dataset_id()
         seed = config.get_seed()
         os.makedirs(f"{self.logdir}_dataset{dataset}", exist_ok=True)
         with open(f"{self.logdir}_dataset{dataset}/log_{method}_{seed}.csv", "w") as f:
-            f.write("generation,best,average,median\n")
-            for gen, best, avg, median in self.history:
-                f.write(f"{gen},{best},{avg},{median}\n")
+            f.write("generation,best,average,median,std\n")
+            for gen, best, avg, median, std in self.history:
+                f.write(f"{gen},{best},{avg},{median},{std}\n")
 
         with open(f"{self.logdir}_dataset{dataset}/result_{method}_{seed}.json", "w") as f:
             json.dump(self.best_org_data, f, indent=2)
+
+        if self.ei_history:
+            with open(f"{self.logdir}_dataset{dataset}/ei_{method}_{seed}.csv", "w") as f:
+                f.write("generation,average,max,std\n")
+                for gen, avg_ei, max_ei, std_ei in self.ei_history:
+                    f.write(f"{gen},{avg_ei},{max_ei},{std_ei}\n")
     

@@ -7,6 +7,7 @@ class Organism:
     def __init__(self, genome: ParamSpace):
         self.fitness: float | None = None
         self.genome = genome
+        self.ei : float | None = None
 
     def __repr__(self):
         return f"Organism(genome={self.genome}, fitness={self.fitness})"
@@ -24,3 +25,11 @@ class Organism:
     
     def get_genome(self) -> ParamSpace:
         return self.genome
+    
+    def set_ei(self, ei: float) -> None:
+        self.ei = ei
+    
+    def get_ei(self) -> float:
+        if self.ei is None:
+            raise ValueError("Organism's Expected Improvement score has not been computed.")
+        return self.ei

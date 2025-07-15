@@ -12,14 +12,12 @@ class EATPE:
         self.ea = EA(config, logger) 
         self.tpe = TPE(config, logger)
     
-    
-    def suggest(self, candidates):
-        k = self.config.get_num_child()
-        return self.tpe.suggest(candidates, k)
-
     def evolve(self):
         # Get the number of generations
         generations = self.config.get_generations()
+        pop_size = self.config.get_pop_size()
+        num_child = self.config.get_num_child()
+        mut_rate = self.config.get_mut_rate()
 
         # Initialize EA population
         self.ea.init_population()
@@ -28,7 +26,7 @@ class EATPE:
 
         for gen in range(generations):
             # Log EA population
-            self.logger.log_generation(gen, self.ea.get_population())
+            self.logger.log_generation(gen, self.ea.get_population(), "EA+TPE")
 
             # Set EA population as TPE sample set
             self.tpe.set_samples(self.ea.get_population())
@@ -40,23 +38,28 @@ class EATPE:
             self.tpe.fit(good_samples, bad_samples)
 
             # Select parents, produce offspring
-            parents = self.ea.select_parents()
-            offspring = []
-            mut_rate = self.config.get_mut_rate()
+            # Has to be more than 'num_child', otherwise there is no point in selecting candidates based on EI
+            num_parents = min(num_child * 2, pop_size)
+            parents = self.ea.select_parents(num_parents) # 'num_child' * 2, or 'pop_size' parents
+            offspring = [] # 'num_child' * 2, or 'pop_size' offspring
             for org in parents:
                 child = self.ea.mutate_org(org, mut_rate)
-                # self.ea.evaluate_org(child) # to avoid unnecessary evaluations in the main loop
                 offspring.append(child)
+            
+            # Evaluate offspring on expected improvement (TPE surrogate)
+            best_org, ei_scores = self.tpe.suggest_num_child(offspring) # 'num_child' candidates
 
-            # Score offspring on Expected Improvement, choose top-k best
-            best_org, _ = self.suggest(offspring)
+            # Log per-iteration expected improvement statistics
+            self.logger.log_ei(gen, ei_scores)
+
+            # Evaluate best candidates on the true objective
             for org in best_org: # 'best_org' maybe contain more than 1 organism
                 self.ea.evaluate_org(org) 
             
             self.ea.append_population(best_org)
 
         # For the final generation
-        self.logger.log_generation(generations, self.ea.population)
+        self.logger.log_generation(generations, self.ea.population, "EA+TPE")
         self.logger.log_best(self.ea.population, self.config, "EA+TPE")
         self.logger.save(self.config, "EA+TPE")
 

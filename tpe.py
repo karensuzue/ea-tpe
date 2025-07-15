@@ -169,6 +169,12 @@ class TPE:
                     raise ValueError(f"Unknown parameter type: {spec['type']}")
             samples.append(Organism(genome))
         return samples
+    
+    def sample_from_good_distribution(self):
+        """
+        TODO
+        """
+        pass
 
     def set_samples(self, samples: List[Organism]) -> None:
         """
@@ -201,7 +207,7 @@ class TPE:
         
         # Sort population/samples set (lowest/best first)
         self.samples.sort(key=lambda o: o.get_fitness())
-        split_idx = int(len(self.samples) * self.gamma)  
+        split_idx = max(1, int(len(self.samples) * self.gamma))
         good_samples = self.samples[:split_idx]
         bad_samples = self.samples[split_idx:]
         return good_samples, bad_samples
@@ -282,6 +288,7 @@ class TPE:
                 l_cat *= lx
                 g_cat *= gx
             ei_scores.append((l_num * l_cat) / (g_num * g_cat))
+            org.set_ei((l_num * l_cat) / (g_num * g_cat))
         
         return np.asarray(ei_scores)
 
@@ -305,41 +312,47 @@ class TPE:
         top_candidates = [candidates[int(i)] for i in sorted_indices]
         top_scores = scores[sorted_indices]
         return top_candidates, top_scores
+    
+    def suggest_num_child(self, candidates: List[Organism]):
+        k = self.config.get_num_child()
+        return self.suggest(candidates, k)
 
     def optimize(self):
         """
         Run the full TPE optimization loop.
         """
-        # Initialize sample set
+        # Initialize sample set, with its size determined by the 'population_size' parameter in the Config
         self.init_samples()
+        # Evaluate initial samples on the true objective function (cross-validation)
         for org in self.samples:
             self.evaluate_org(org)
 
-        eval_count = self.config.get_evaluations()
-
-        init_sample_size = len(self.samples)
-        for eval in range(eval_count - init_sample_size):
+        # TPE is not an EA, we're just reusing EA infrastructure for smoother integration
+        generations = self.config.get_generations() 
+        for gen in range(generations):
             # Log best, average, and median objective values in the current sample set
-            self.logger.log_generation(eval, self.samples)
+            self.logger.log_generation(gen, self.samples, "TPE")
 
-            # Split sample set into 'good' and 'bad' groups
+            # Split the current sample set into 'good' and 'bad' groups
             good_samples, bad_samples = self.split_samples()
         
             self.fit(good_samples, bad_samples)
 
             # Randomly generate new candidates
+            # TODO: Switch to drawing from the 'good' numeric and categorical dist. independently
             candidates = self.random_samples()
-            ei = self.expected_improvement(candidates)
-            best_org, _ = self.suggest(candidates)
+            # Select the top "num_child" candidates for evaluation on the true objective
+            best_org, ei_scores = self.suggest_num_child(candidates)
 
-            # 'best_org' maybe contain more than 1 organism
-            for org in best_org:
+            # Log per-iteration expected improvement statistics (only from the chosen candidates)
+            self.logger.log_ei(gen, ei_scores)
+
+            # Evaluate the chosen candidates on the true objective
+            for org in best_org: # 'best_org' maybe contain more than 1 organism
                 self.evaluate_org(org)
 
             # Update sample set
             self.samples += best_org
-
-            # Log average and best expected improvement over time
         
         # Log the best observed hyperparameter configuration across all iterations
         self.logger.log_best(self.samples, self.config, "TPE")
