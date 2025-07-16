@@ -42,16 +42,8 @@ def main():
         num_candidates = args.num_candidates,
         tour_size = args.tour_size,
         mut_rate  =  args.mut_rate,
-        # If 'replacement' is True, 'num_child' offspring replace part of the population.
-        # replacement = args.replacement,
         dataset_idx = args.dataset,
-        # Estimate the number of generations from the total evaluation budget.
-        # We assume one fitness evaluation per organism (no caching/reoccurrences may occur).
-        # Only 'num_child' individuals are evaluated each generation.
-        # The first generation (initial population) always evaluates 'pop_size' individuals.
-        # generations = (args.evaluations - args.pop_size) // args.num_child, 
-        # generations = args.evaluations // args.pop_size
-            # evaluations = initial population size + number of children * number of generations
+        debug = args.debug
     )
 
     logger = Logger(
