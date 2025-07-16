@@ -95,7 +95,7 @@ class TPE:
     and uses kernel density estimation (KDE) and probability mass functions (PMFs) 
     to model the likelihood of good and bad configurations.
     """
-    def __init__(self, config: Config, logger: Logger, gamma = 0.2):
+    def __init__(self, config: Config, logger: Logger, gamma: float = 0.2, k: int = 1):
         """
         Parameters:
         - config: Config
@@ -109,10 +109,14 @@ class TPE:
         self.config = config
         self.logger = logger
         self.gamma = gamma # splitting parameter
+        self.k = k # number of top candidates per iteration 
 
         self.param_space = self.config.get_param_space()
+        self.evaluations = self.config.get_evaluations()
+        self.init_sample_size = self.config.get_pop_size()
         self.num_names = self.config.get_num_param_names()
         self.cat_names = self.config.get_cat_param_names()
+        self.num_candidates = self.config.get_num_candidates()
 
         self.samples: List[Organism] = [] # Essentially, the "population" (evaluated on the true objective)
         self.X_train, self.X_test, self.y_train, self.y_test = self.config.load_dataset()
@@ -122,28 +126,10 @@ class TPE:
         self.cat_l = {}
         self.cat_g = {}
 
-    def init_samples(self) -> None:
-        """
-        Initialize the sample population with random genomes based on the parameter space.
-        This method clears any existing samples and generates a new population of organisms with
-        randomly sampled hyperparameters.
-        """
-        self.samples.clear() # just in case
-
-        sample_size = self.config.get_pop_size()
-        for _ in range(sample_size):
-            genome = {}
-            for param_name, spec in self.param_space.items():
-                if spec["type"] == "int":
-                    genome[param_name] = random.randint(*spec["bounds"])
-                elif spec["type"] == "float":
-                    genome[param_name] = random.uniform(*spec["bounds"])
-                elif spec["type"] == "cat":
-                    genome[param_name] = random.choice(spec["bounds"])
-                else:
-                    raise ValueError(f"Unknown parameter type: {spec['type']}")
-            self.samples.append(Organism(genome))
-        assert (len(self.samples) == sample_size)
+        # FOR DEBUGGING:
+        self.debug = self.config.get_debug()
+        self.hard_eval_count = 0 # evaluations on the true objective
+        self.soft_eval_count = 0 # evaluations on the surrogate/expected improvement
     
     def random_samples(self, count: int = 10) -> List[Organism]:
         """
@@ -177,8 +163,6 @@ class TPE:
         pass
 
     def set_samples(self, samples: List[Organism]) -> None:
-        """
-        """
         self.samples = samples
 
     def evaluate_org(self, org: Organism) -> None:
@@ -305,6 +289,9 @@ class TPE:
         Returns a tuple containing the top-k organisms and their EI scores. 
         """
         scores = self.expected_improvement(candidates)
+
+        if self.debug: self.soft_eval_count += len(scores)
+
         # 'np.argsort' gives indices that would sort scores in ascending order
         # '::-1' reverses that, higher EI is better
         # ':k' selects the top-k indices
@@ -313,56 +300,59 @@ class TPE:
         top_scores = scores[sorted_indices]
         return top_candidates, top_scores
     
-    def suggest_num_child(self, candidates: List[Organism]):
-        k = self.config.get_num_child()
-        return self.suggest(candidates, k)
-
     def optimize(self):
         """
         Run the full TPE optimization loop.
         """
         # Initialize sample set, with its size determined by the 'population_size' parameter in the Config
-        self.init_samples()
+        self.samples = self.random_samples(self.init_sample_size)
+        assert (len(self.samples) == self.init_sample_size)
+
         # Evaluate initial samples on the true objective function (cross-validation)
         for org in self.samples:
             self.evaluate_org(org)
+            if self.debug: self.hard_eval_count += 1 
 
         # TPE is not an EA, we're just reusing EA infrastructure for smoother integration
-        generations = self.config.get_generations() 
+        generations = (self.evaluations - self.init_sample_size) // self.k
         for gen in range(generations):
             # Log best, average, and median objective values in the current sample set
-            self.logger.log_generation(gen, self.samples, "TPE")
+            self.logger.log_generation(gen, self.init_sample_size + self.k * gen, self.samples, "TPE")
 
             # Split the current sample set into 'good' and 'bad' groups
             good_samples, bad_samples = self.split_samples()
         
             self.fit(good_samples, bad_samples)
 
-            # Randomly generate new candidates
-            # TODO: Switch to drawing from the 'good' numeric and categorical dist. independently
-            candidates = self.random_samples(self.config.get_num_child() * 2) # should be more than the number of chosen candidates
-            # Select the top "num_child" candidates for evaluation on the true objective
-            best_org, ei_scores = self.suggest_num_child(candidates)
+            # We select enough candidates to keep the number of 'soft' evaluations consistent between TPE and EA+TPE
+            candidates = self.random_samples(self.num_candidates)
+
+            # Select the top candidate(s) for evaluation on the true objective
+            best_org, ei_scores = self.suggest(candidates)
 
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
-            self.logger.log_ei(gen, ei_scores)
+            self.logger.log_ei(gen, self.init_sample_size + self.k * gen, ei_scores)
 
             # Evaluate the chosen candidates on the true objective
             for org in best_org: # 'best_org' maybe contain more than 1 organism
                 self.evaluate_org(org)
+                if self.debug: self.hard_eval_count += 1 
 
             # Update sample set
             self.samples += best_org
-        
+
+        # Log best, average, and median objective values in the final sample set
+        self.logger.log_generation(gen, self.init_sample_size + self.k * generations, self.samples, "TPE")
         # Log the best observed hyperparameter configuration across all iterations
         self.logger.log_best(self.samples, self.config, "TPE")
         self.logger.save(self.config, "TPE")
 
+        print(f"Hard evaluations: {self.hard_eval_count}")
+        print(f"Soft evaluations {self.soft_eval_count}")
 
 
-
-
-
+    def run(self) -> None:
+        self.optimize()
         
 
 

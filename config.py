@@ -26,27 +26,30 @@ ParamSpace = Dict[str, ParamSpec]
 
 class Config:
     def __init__(self, 
-                 dataset_idx: int = 0, 
-                 seed: int = 0, 
-                 generations: int = 50, 
-                 num_child: int = 25,
+                 seed: int = 0,
+                 evaluations: int = 500,
                  pop_size: int = 50, 
+                 num_candidates: int = 10,
                  tour_size: int = 5,
                  mut_rate: float = 0.1,
-                 replacement: bool = True,
-                 evaluations: int = 500, 
-                 logdir: str = 'results'):
+                 # replacement: bool = True,
+                 dataset_idx: int = 0, 
+                 logdir: str = 'results',
+                 debug = False):
+        
+        # if num_child < pop_size:
+        #     raise ValueError(f"'num_child' ({num_child}) must be >= 'pop_size' ({pop_size})")
         
         self.seed = seed
-        self.generations = generations
-        self.num_child = num_child
+        self.evaluations = evaluations
         self.pop_size = pop_size
+        self.num_candidates = num_candidates
         self.tour_size = tour_size
         self.mut_rate = mut_rate
-        self.replacement = replacement
-        self.evaluations = evaluations
-        self.logdir = logdir
+        # self.replacement = replacement
         self.dataset_idx = dataset_idx
+        self.logdir = logdir
+        self.debug = debug
 
         self.dataset_ids = [1464, 1489, 44]
         self.param_names = ['n_estimators', 'criterion']
@@ -61,25 +64,31 @@ class Config:
     
     def get_seed(self) -> int:
         return self.seed
-
-    def get_replacement_state(self) -> bool:
-        """ See whether the replacement strategy is enabled. """
-        return self.replacement
-
+    
     def get_evaluations(self) -> int:
         """ Get the number of evaluations. """
         return self.evaluations
+
+    # def get_replacement_state(self) -> bool:
+    #     """ See whether the replacement strategy is enabled. """
+    #     return self.replacement
     
-    def get_generations(self) -> int:
-        """ Get the number of generations. """
-        return self.generations
-    
-    def get_num_child(self) -> int:
-        return self.num_child
+    # def get_generations(self) -> int:
+    #     """ Get the number of generations. """
+    #     return self.generations
     
     def get_pop_size(self) -> int:
         """ Get population size. """
         return self.pop_size
+    
+    # 'num_child' will always be set to 'pop_size'
+    # def get_num_child(self) -> int:
+    #     """ Get the number of offspring """
+    #     return self.num_child
+    
+    def get_num_candidates(self) -> int:
+        """ For EA+TPE. """
+        return self.num_candidates
     
     def get_tour_size(self) -> int:
         """ Get tournament size for selection. """
@@ -146,7 +155,6 @@ class Config:
 
     def get_logdir(self) -> str:
         return self.logdir
-
-
-    # def save_results():
-    # pass
+    
+    def get_debug(self) -> bool:
+        return self.debug

@@ -9,7 +9,7 @@ results_dir = Path(f"results_dataset{dataset_idx}")
 
 
 # Choose method and seed
-method = "EA+TPE" # "EA+TPE", "TPE", "EA"
+method = "EA" # "EA+TPE", "TPE", "EA"
 seed = 0
 log_dir = results_dir / f"log_{method}_{seed}.csv"
 log = pd.read_csv(log_dir)
