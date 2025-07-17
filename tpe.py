@@ -30,13 +30,19 @@ class MultivariateKDE:
         - eps : float
             Minimum floor value for the estimated density. Returned densities will be at least this value.
         """
-        # KDE needs more than 2 points
+        # If there is only 1 sample (n=1), KDE will fail
         if data.shape[1] == 1:
-            # Make another copy of the only point in 'data' 
-            data = np.hstack([data, data + 1e-3]) 
+            data = np.hstack([data, data + 1e-3]) # duplicate it slightly
+        
+        # Check if covariance matrix is singular: must have >1 distinct samples
+        if np.linalg.matrix_rank(np.cov(data)) < data.shape[0]:
+            # Add small noise to escape colinearity
+            data = data + np.random.normal(scale=1e-3, size=data.shape) 
+
         self.kde = gaussian_kde(data, bw_method='silverman')
         self.kde.set_bandwidth(self.kde.factor * bw_factor)
         self.eps = eps
+
 
     def pdf(self, vec: Union[np.ndarray, List]):
         """
@@ -215,11 +221,12 @@ class TPE:
                                      for param_name in self.num_names])
         bad_num_samples = np.array([[o.get_genome()[param_name] for o in bad_samples] 
                                      for param_name in self.num_names])
-        
+        # print("good_num_samples.shape:", good_num_samples.shape)
+        # print("good_num_samples stds:", np.std(good_num_samples, axis=1))
+
         # Multivariate KDEs
         self.multi_l = MultivariateKDE(good_num_samples)
         self.multi_g = MultivariateKDE(bad_num_samples)
-
 
         # Independent PMFs
         self.cat_l.clear()
@@ -253,7 +260,6 @@ class TPE:
         
         Returns an array of EI scores, one per candidate.
         """
-
         ei_scores = []
         for org in candidates:
             genome = org.get_genome()
@@ -261,8 +267,8 @@ class TPE:
             if self.num_names:
                 num_vals = [genome[param_name] for param_name in self.num_names] # (, d_num)
                 # 'num_vals' gets reshaped into (d_num, 1) here
-                l_num = self.multi_l.pdf(num_vals) # a single density value
-                g_num = self.multi_g.pdf(num_vals)
+                l_num = float(self.multi_l.pdf(num_vals)) # a single density value
+                g_num = float(self.multi_g.pdf(num_vals))
             else: # If no numeric parameters exist, no contribution
                 l_num = g_num = 1.0 
             
@@ -274,9 +280,13 @@ class TPE:
                 gx = self.cat_g[param_name].pmf(genome[param_name])
                 l_cat *= lx
                 g_cat *= gx
-            ei_scores.append((l_num * l_cat) / (g_num * g_cat))
+            
+            # To avoid NaN
+            if (g_num * g_cat) <= 1e-12:
+                ei_scores.append(0.0)
+            else:
+                ei_scores.append((l_num * l_cat) / (g_num * g_cat))
             org.set_ei((l_num * l_cat) / (g_num * g_cat))
-        
         return np.asarray(ei_scores)
 
     def suggest(self, candidates: List[Organism], k: int = 1) -> Tuple[List[Organism], np.ndarray]:
@@ -292,6 +302,8 @@ class TPE:
         Returns a tuple containing the top-k organisms and their EI scores. 
         """
         scores = self.expected_improvement(candidates)
+        assert(len(scores) != 0)
+        # print("CANDIDATE EI SCORES:", scores)
 
         if self.debug: self.soft_eval_count += len(scores)
 
@@ -350,8 +362,9 @@ class TPE:
         self.logger.log_best(self.samples, self.config, "TPE")
         self.logger.save(self.config, "TPE")
 
-        print(f"Hard evaluations: {self.hard_eval_count}")
-        print(f"Soft evaluations {self.soft_eval_count}")
+        if self.debug:
+            print(f"Hard evaluations: {self.hard_eval_count}")
+            print(f"Soft evaluations {self.soft_eval_count}")
 
 
     def run(self) -> None:

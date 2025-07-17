@@ -44,15 +44,18 @@ class EATPE:
 
             # Set EA population as TPE sample set
             self.tpe.set_samples(self.population)
+            assert(len(self.tpe.samples) != 0)
 
             # Split sample set into 'good' and 'bad' groups
             good_samples, bad_samples = self.tpe.split_samples()
+            assert(len(good_samples) > 1 and len(bad_samples) > 1)
 
             # Fit TPE
             self.tpe.fit(good_samples, bad_samples)
 
             # Select 'pop_size' parents 
             parents = self.ea.select_parents(self.pop_size)
+            assert(len(parents) != 0)
 
             self.population.clear()
             # List containing the expected improvement scores of the chosen offsprings
@@ -64,7 +67,7 @@ class EATPE:
                 # Evaluate each candidate's expected improvement score, choose best
                 best_org, best_ei_scores = self.tpe.suggest(candidates) # this should be a single offspring and its score
                 if self.debug: self.soft_eval_count = self.tpe.soft_eval_count
-
+                
                 # Evaluate best candidate(s) on the true objective.
                 # The system allows 'best_org' to contain more than one organism (k >= 1),
                 # but in practice, there's usually only one (k = 1). 
@@ -75,7 +78,7 @@ class EATPE:
                 
                 # If k = 1, one offspring is produced per parent
                 self.population += best_org # a bit sloppy, but works for now
-                ei_all_parents += best_ei_scores # this should be one score
+                ei_all_parents += best_ei_scores.tolist() # this should be one score
 
             # Log per-iteration expected improvement statistics
             self.logger.log_ei(gen, self.pop_size * (gen + 1), ei_all_parents)
@@ -85,8 +88,9 @@ class EATPE:
         self.logger.log_best(self.population, self.config, "EA+TPE")
         self.logger.save(self.config, "EA+TPE")
 
-        print(f"Hard evaluations: {self.hard_eval_count}")
-        print(f"Soft evaluations {self.soft_eval_count}")
+        if self.debug:
+            print(f"Hard evaluations: {self.hard_eval_count}")
+            print(f"Soft evaluations {self.soft_eval_count}")
 
     def run(self):
         self.evolve()

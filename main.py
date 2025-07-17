@@ -50,14 +50,14 @@ def main():
         logdir = args.logdir
     )
 
-    # ea_solver = EA(config, logger)
-    # ea_solver.run()
+    ea_solver = EA(config, logger)
+    ea_solver.run()
 
     # tpe_solver = TPE(config, logger)
     # tpe_solver.run()
 
-    eatpe_solver = EATPE(config, logger)
-    eatpe_solver.run()
+    # eatpe_solver = EATPE(config, logger)
+    # eatpe_solver.run()
 
 
 if __name__ == "__main__":
