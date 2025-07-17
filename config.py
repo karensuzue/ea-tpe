@@ -68,26 +68,13 @@ class Config:
     def get_evaluations(self) -> int:
         """ Get the number of evaluations. """
         return self.evaluations
-
-    # def get_replacement_state(self) -> bool:
-    #     """ See whether the replacement strategy is enabled. """
-    #     return self.replacement
-    
-    # def get_generations(self) -> int:
-    #     """ Get the number of generations. """
-    #     return self.generations
     
     def get_pop_size(self) -> int:
         """ Get population size. """
         return self.pop_size
     
-    # 'num_child' will always be set to 'pop_size'
-    # def get_num_child(self) -> int:
-    #     """ Get the number of offspring """
-    #     return self.num_child
-    
     def get_num_candidates(self) -> int:
-        """ For EA+TPE. """
+        """ For TPE and EA+TPE. """
         return self.num_candidates
     
     def get_tour_size(self) -> int:

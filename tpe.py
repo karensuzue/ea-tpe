@@ -162,6 +162,9 @@ class TPE:
         """
         pass
 
+    def get_samples(self) -> List[Organism]:
+        return self.samples
+    
     def set_samples(self, samples: List[Organism]) -> None:
         self.samples = samples
 

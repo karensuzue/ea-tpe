@@ -122,16 +122,15 @@ class EA:
         for org in self.population:
             self.evaluate_org(org)
 
-        init_eval = self.pop_size
         generations = self.evaluations // self.pop_size - 1
         for gen in range(generations):
-            self.logger.log_generation(gen, init_eval * (gen + 1), self.population, "EA")
+            self.logger.log_generation(gen, self.pop_size * (gen + 1), self.population, "EA")
 
             parents = self.select_parents(self.pop_size)
             self.population = self.make_offspring(parents)
 
         # For the final generation
-        self.logger.log_generation(generations, init_eval * (generations + 1), self.population, "EA")
+        self.logger.log_generation(generations, self.pop_size * (generations + 1), self.population, "EA")
         self.logger.log_best(self.population, self.config, "EA")
         self.logger.save(self.config, "EA")
 

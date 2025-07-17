@@ -36,6 +36,9 @@ class Logger:
         }
     
     def log_ei(self, generation: int, evaluation: int, ei_scores: np.ndarray):
+        if len(ei_scores) == 0:
+            print(f"No EI scores at gen {generation} — skipping EI log.")
+            return
         avg_ei = np.mean(ei_scores)
         max_ei = np.max(ei_scores)
         std_ei = np.std(ei_scores)
