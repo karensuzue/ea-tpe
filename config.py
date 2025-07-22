@@ -19,6 +19,8 @@ class CatParam(TypedDict):
     bounds: Tuple[str, ...]
     type: Literal["cat"]
 
+# Missing: Boolean, will handle later
+
 # ParamSpec can be one of...
 ParamSpec = Union[IntParam, FloatParam, CatParam]
 # Dictionary where each key is a parameter name, and each value is exactly one of the 3 kinds of ParamSpecs
@@ -52,10 +54,11 @@ class Config:
         self.debug = debug
 
         self.dataset_ids = [1464, 1489, 44]
-        self.param_names = ['n_estimators', 'criterion']
-        self.param_space = {
+        self.param_names = ['n_estimators', 'criterion'] # Not necessary
+        self.param_space = { 
             'n_estimators': {'bounds': (50, 500), 'type': 'int'},
             'criterion': {'bounds': ("gini", "entropy", "log_loss"), 'type': 'cat'}
+            # ... add more if needed
         }
 
         # This should affect the entire system

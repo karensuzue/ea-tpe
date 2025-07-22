@@ -26,6 +26,10 @@ class EA:
         
         self.X_train, self.X_test, self.y_train, self.y_test = self.config.load_dataset()
 
+        # FOR DEBUGGING:
+        self.debug = self.config.get_debug()
+        self.hard_eval_count = 0 # evaluations on the true objective
+
     def get_population(self) -> List[Organism]:
         return self.population
     
@@ -113,6 +117,9 @@ class EA:
             child = self.mutate_org(org, self.mut_rate)
             self.evaluate_org(child)
             offspring.append(child)
+
+            if self.debug: self.hard_eval_count += 1
+
         assert(len(offspring) == self.pop_size)
         return offspring
 
@@ -121,6 +128,7 @@ class EA:
         self.init_population()
         for org in self.population:
             self.evaluate_org(org)
+            if self.debug: self.hard_eval_count += 1
 
         generations = self.evaluations // self.pop_size - 1
         for gen in range(generations):
@@ -133,6 +141,9 @@ class EA:
         self.logger.log_generation(generations, self.pop_size * (generations + 1), self.population, "EA")
         self.logger.log_best(self.population, self.config, "EA")
         self.logger.save(self.config, "EA")
+
+        if self.debug:
+            print(f"Hard evaluations: {self.hard_eval_count}")
 
     def run(self) -> None:
         self.evolve()
