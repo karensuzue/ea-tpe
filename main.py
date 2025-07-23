@@ -1,6 +1,5 @@
 import argparse
 from config import Config
-from logger import Logger
 from ea import EA
 from tpe import TPE
 from eatpe import EATPE
@@ -35,21 +34,24 @@ def main():
         tour_size = args.tour_size,
         mut_rate  =  args.mut_rate,
         dataset_idx = args.dataset,
-        debug = args.debug
+        logidr = args.logdir
+        debug = args.debug,
     )
 
-    logger = Logger(
-        logdir = args.logdir
-    )
+    # logger = Logger(
+    #     logdir = args.logdir
+    # )
 
-    ea_solver = EA(config, logger)
-    ea_solver.run()
+    # ea_solver = EA(config, logger)
+    # ea_solver.run() <---- TODO: provide x.train and y.train externally
 
     # tpe_solver = TPE(config, logger)
-    # tpe_solver.run()
+    # tpe_solver.run() <---- TODO: provide x.train and y.train externally
 
     # eatpe_solver = EATPE(config, logger)
-    # eatpe_solver.run()
+    # eatpe_solver.run() # <-- TODO: ^^^ same as above
+
+    # TODO: Maybe make a separate TPE-Optimizer or BO class, which calls TPE. TPE should only contain EI(), suggest(), etc. 
 
 
 if __name__ == "__main__":

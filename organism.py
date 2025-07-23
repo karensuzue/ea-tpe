@@ -1,16 +1,20 @@
 from config import ParamSpace
+from genotype import ModelParams
+from typeguard import typechecked
 
+@typechecked
 class Organism:
     """
-    A set of hyperparameters to be evolved.
+    This class encapsulates a ModelParams object and stores additional information, 
+    such as the objective value (fitness) and expected improvement.
     """
-    def __init__(self, genome: ParamSpace):
-        self.fitness: float | None = None
-        self.genome = genome
-        self.ei : float | None = None
+    def __init__(self, genotype: ModelParams, fitness: float | None = None, ei: float | None = None):
+        self.fitness = fitness
+        self.genotype = genotype
+        self.ei = ei
 
     def __repr__(self):
-        return f"Organism(genome={self.genome}, fitness={self.fitness})"
+        return f"Organism(genotype={self.genotype}, fitness={self.fitness})"
     
     def set_fitness(self, f: float) -> None:
         self.fitness = f
@@ -20,11 +24,11 @@ class Organism:
             raise ValueError("Organism hasn't been evaluated.")
         return self.fitness
 
-    def set_genome(self, g: ParamSpace) -> None:
-        self.genome = g
+    def set_genotype(self, g: ModelParams) -> None:
+        self.genotype = g
     
-    def get_genome(self) -> ParamSpace:
-        return self.genome
+    def get_genotype(self) -> ModelParams:
+        return self.genotype
     
     def set_ei(self, ei: float) -> None:
         self.ei = ei

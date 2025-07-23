@@ -49,28 +49,28 @@ class EA:
     
     def init_population(self) -> None:
         """
-        Initialize the sample population with random genomes based on the parameter space.
+        Initialize the sample population with random genotypes based on the parameter space.
         This method clears any existing samples and generates a new population of organisms with
         randomly sampled hyperparameters.
         """
         self.population.clear() # just in case
         for _ in range(self.pop_size):
-            genome = {}
+            genotype = {}
             for param_name, spec in self.param_space.items():
                 if spec["type"] == "int":
-                    genome[param_name] = random.randint(*spec["bounds"])
+                    genotype[param_name] = random.randint(*spec["bounds"])
                 elif spec["type"] == "float":
-                    genome[param_name] = random.uniform(*spec["bounds"])
+                    genotype[param_name] = random.uniform(*spec["bounds"])
                 elif spec["type"] == "cat":
-                    genome[param_name] = random.choice(spec["bounds"])
+                    genotype[param_name] = random.choice(spec["bounds"])
                 else:
                     raise ValueError(f"Unknown parameter type: {spec['type']}")
-            self.population.append(Organism(genome))
+            self.population.append(Organism(genotype))
         assert (len(self.population) == self.pop_size)
 
     def evaluate_org(self, org: Organism) -> None:
         # Must maintain the same seed/random_state across experiments  - set 'random_state' to 0
-        model = RandomForestClassifier(**org.get_genome(), random_state=0)
+        model = RandomForestClassifier(**org.get_genotype(), random_state=0)
         # Inverted, as TPE expects minimization
         score = -1 * cross_val_score(model, self.X_train, self.y_train, cv=5, scoring='accuracy').mean() 
         org.set_fitness(score)
@@ -97,18 +97,18 @@ class EA:
         return parents
     
     def mutate_org(self, org : Organism, mut_rate: float) -> Organism:
-        genome = org.get_genome().copy()
+        genotype = org.get_genotype().copy()
         param_space = self.config.get_param_space()
         # Per-gene mutation
         for name, spec in param_space.items():
             if random.random() < mut_rate:
                 if spec["type"] == "int":
-                    genome[name] = random.randint(*spec["bounds"])
+                    genotype[name] = random.randint(*spec["bounds"])
                 elif spec["type"] == "float":
-                    genome[name] = random.uniform(*spec["bounds"])
+                    genotype[name] = random.uniform(*spec["bounds"])
                 elif spec["type"] == "cat":
-                    genome[name] = random.choice(spec["bounds"])
-        organism = Organism(genome)
+                    genotype[name] = random.choice(spec["bounds"])
+        organism = Organism(genotype)
         return organism
 
     def make_offspring(self, parents: List[Organism]) -> List[Organism]:

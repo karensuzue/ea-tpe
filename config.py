@@ -3,6 +3,7 @@ import openml
 import random
 from sklearn.model_selection import train_test_split
 from typing import Tuple, Dict, Any, List, TypedDict, Literal, Union
+from logger import Logger
 
 
 # Defining custom type alias
@@ -32,7 +33,7 @@ class Config:
                  evaluations: int = 500,
                  pop_size: int = 50, 
                  num_candidates: int = 10,
-                 tour_size: int = 5,
+                 tour_size: int = 2,
                  mut_rate: float = 0.1,
                  # replacement: bool = True,
                  dataset_idx: int = 0, 
@@ -48,70 +49,48 @@ class Config:
         self.num_candidates = num_candidates
         self.tour_size = tour_size
         self.mut_rate = mut_rate
-        # self.replacement = replacement
         self.dataset_idx = dataset_idx
         self.logdir = logdir
         self.debug = debug
 
         self.dataset_ids = [1464, 1489, 44]
-        self.param_names = ['n_estimators', 'criterion'] # Not necessary
-        self.param_space = { 
+        # self.param_names = ['n_estimators', 'criterion'] # Not necessary
+        self.param_space = { # use ConfigSpace in the future
             'n_estimators': {'bounds': (50, 500), 'type': 'int'},
             'criterion': {'bounds': ("gini", "entropy", "log_loss"), 'type': 'cat'}
             # ... add more if needed
         }
+
+        self.logger = Logger(self.logdir)
 
         # This should affect the entire system
         random.seed(seed)
         np.random.seed(seed)
     
     def get_seed(self) -> int:
+        """ Returns the current seed. """
         return self.seed
     
     def get_evaluations(self) -> int:
-        """ Get the number of evaluations. """
+        """ Returns the number of evaluations. """
         return self.evaluations
     
     def get_pop_size(self) -> int:
-        """ Get population size. """
+        """ Returns population size. """
         return self.pop_size
     
     def get_num_candidates(self) -> int:
-        """ For TPE and EA+TPE. """
+        """ Returns the number of candidate "offspring" For TPE and EA+TPE. """
         return self.num_candidates
     
     def get_tour_size(self) -> int:
-        """ Get tournament size for selection. """
+        """ Returns tournament size for selection. """
         return self.tour_size
     
     def get_mut_rate(self) -> float:
-        """ Get mutation rate. """
+        """ Returns mutation rate. """
         return self.mut_rate
     
-    def get_param_space(self) -> ParamSpace:
-        """ Get parameter names and specifications. """
-        return self.param_space
-    
-    def get_param_names(self) -> List[str]:
-        """ Get parameter names. """
-        return self.param_names
-    
-    def get_num_param_names(self) -> List[str]:
-        return [n for n, info in self.param_space.items() 
-                if info['type'] == "int" or info['type'] == "float"]
-    
-    def get_cat_param_names(self) -> List[str]:
-        return [n for n, info in self.param_space.items()
-                if info['type'] == "cat"]
-    
-    def get_param_type(self, param_name) -> str:
-        # This should automatically raise a KeyError if 'param_name' does not exist
-        return self.param_space[param_name]['type']
-    
-    def add_param(self, name: str, bounds: Tuple[Any, Any], type: Literal["int", "float", "cat"]) -> None:
-        """ Adds a new parameter. """
-        self.param_space[name] = {'bounds': bounds, 'type': type}
-        self.param_names.append(name)
     
     def get_dataset_id(self) -> int:
         """ Returns the ID of the chosen dataset. """
@@ -144,7 +123,13 @@ class Config:
         return train_test_split(X, y, test_size = 0.2, random_state = 0)
 
     def get_logdir(self) -> str:
+        """ Returns the log directory path. """
         return self.logdir
     
+    def get_logger(self) -> Logger:
+        """ Returns the Logger object. """
+        return self.logger
+    
     def get_debug(self) -> bool:
+        """ Returns 'debug' state. """
         return self.debug

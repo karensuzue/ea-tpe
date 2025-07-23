@@ -34,6 +34,7 @@ class MultivariateKDE:
         if data.shape[1] == 1:
             data = np.hstack([data, data + 1e-3]) # duplicate it slightly
         
+        # TODO: If number of numeric hyperparameters = 1, otherwise dont run this
         # Check if covariance matrix is singular: must have >1 distinct samples
         if np.linalg.matrix_rank(np.cov(data)) < data.shape[0]:
             # Add small noise to escape colinearity
@@ -149,17 +150,17 @@ class TPE:
         """
         samples = []
         for _ in range(count):
-            genome = {}
+            genotype = {}
             for param_name, spec in self.param_space.items():
                 if spec["type"] == "int":
-                    genome[param_name] = random.randint(*spec["bounds"])
+                    genotype[param_name] = random.randint(*spec["bounds"])
                 elif spec["type"] == "float":
-                    genome[param_name] = random.uniform(*spec["bounds"])
+                    genotype[param_name] = random.uniform(*spec["bounds"])
                 elif spec["type"] == "cat":
-                    genome[param_name] = random.choice(spec["bounds"])
+                    genotype[param_name] = random.choice(spec["bounds"])
                 else:
                     raise ValueError(f"Unknown parameter type: {spec['type']}")
-            samples.append(Organism(genome))
+            samples.append(Organism(genotype))
         return samples
     
     def sample_from_good_distribution(self):
@@ -183,7 +184,7 @@ class TPE:
             The organism to evaluate. Its fitness will be updated in-place.
         """
         # Must maintain the same seed/random_state across experiments 
-        model = RandomForestClassifier(**org.get_genome(), random_state=0)
+        model = RandomForestClassifier(**org.get_genotype(), random_state=0)
         # Inverted, as TPE expects minimization
         score = -1 * cross_val_score(model, self.X_train, self.y_train, cv=5, scoring='accuracy').mean() 
         org.set_fitness(score)
@@ -217,9 +218,9 @@ class TPE:
         """
         
         # Extract values of numeric dimensions/variables from the sample set
-        good_num_samples = np.array([[o.get_genome()[param_name] for o in good_samples] 
+        good_num_samples = np.array([[o.get_genotype()[param_name] for o in good_samples] 
                                      for param_name in self.num_names])
-        bad_num_samples = np.array([[o.get_genome()[param_name] for o in bad_samples] 
+        bad_num_samples = np.array([[o.get_genotype()[param_name] for o in bad_samples] 
                                      for param_name in self.num_names])
         # print("good_num_samples.shape:", good_num_samples.shape)
         # print("good_num_samples stds:", np.std(good_num_samples, axis=1))
@@ -235,7 +236,7 @@ class TPE:
         self.cat_l = {
             param_name: CategoricalPMF(
                 # Extract categorical values from samples in (d, n) format
-                values = [o.get_genome()[param_name] for o in good_samples],
+                values = [o.get_genotype()[param_name] for o in good_samples],
                 all_categories = self.param_space[param_name]["bounds"]
             )
             for param_name in self.cat_names
@@ -243,7 +244,7 @@ class TPE:
 
         self.cat_g = {
             param_name : CategoricalPMF(
-                values = [o.get_genome()[param_name] for o in bad_samples],
+                values = [o.get_genotype()[param_name] for o in bad_samples],
                 all_categories = self.param_space[param_name]["bounds"]
             )
             for param_name in self.cat_names
@@ -262,10 +263,10 @@ class TPE:
         """
         ei_scores = []
         for org in candidates:
-            genome = org.get_genome()
+            genotype = org.get_genotype()
             # Numeric contribution (multivariate)
             if self.num_names:
-                num_vals = [genome[param_name] for param_name in self.num_names] # (, d_num)
+                num_vals = [genotype[param_name] for param_name in self.num_names] # (, d_num)
                 # 'num_vals' gets reshaped into (d_num, 1) here
                 l_num = float(self.multi_l.pdf(num_vals)) # a single density value
                 g_num = float(self.multi_g.pdf(num_vals))
@@ -276,8 +277,8 @@ class TPE:
             l_cat = g_cat = 1.0
             # PMFs are univariate
             for param_name, pmf_l in self.cat_l.items():
-                lx = pmf_l.pmf(genome[param_name]) # a single density
-                gx = self.cat_g[param_name].pmf(genome[param_name])
+                lx = pmf_l.pmf(genotype[param_name]) # a single density
+                gx = self.cat_g[param_name].pmf(genotype[param_name])
                 l_cat *= lx
                 g_cat *= gx
             
@@ -342,7 +343,7 @@ class TPE:
             # We select enough candidates to keep the number of 'soft' evaluations consistent between TPE and EA+TPE
             candidates = self.random_samples(self.num_candidates)
 
-            # Select the top candidate(s) for evaluation on the true objective
+            # Select the top candidate(s) for evaluation on the true objective (default k=1)
             best_org, ei_scores = self.suggest(candidates)
 
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
@@ -365,7 +366,7 @@ class TPE:
         if self.debug:
             print(f"Hard evaluations: {self.hard_eval_count}")
             print(f"Soft evaluations {self.soft_eval_count}")
-
+            assert(len(self.samples) == self.evaluations)
 
     def run(self) -> None:
         self.optimize()
