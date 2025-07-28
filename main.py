@@ -1,8 +1,32 @@
 import argparse
+import numpy as np
+import os
+import pickle
 from config import Config
+from logger import Logger
 from ea import EA
 from tpe import TPE
-from eatpe import EATPE
+from bo import BO
+from tpec import TPEC
+from param_space import param_space_factory
+
+#https://github.com/automl/ASKL2.0_experiments/blob/84a9c0b3af8f7ac6e2a003d4dea5e6dce97d4315/experiment_scripts/utils.py
+def load_task(task_id: int, data_dir: str, preprocess=True):
+    """ 
+    Loads and splits the chosen task. 
+    Project must include 'data' directory, which stores a set of 
+    preprocessed and cached OpenML tasks. 
+    """
+    cached_data_path = f"{data_dir}/{task_id}_{preprocess}.pkl"
+    if os.path.exists(cached_data_path):
+        d = pickle.load(open(cached_data_path, "rb"))
+        X_train, y_train, X_test, y_test = d['X_train'], d['y_train'], d['X_test'], d['y_test']
+    else:
+        print(f'Task {task_id} not found')
+        exit(0)
+
+    return X_train, y_train, X_test, y_test
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -13,19 +37,27 @@ def main():
     parser.add_argument("--pop_size", type = int, default = 50,
                         help = "Population size.")
     parser.add_argument('--num_candidates', type=int, default=10,
-                        help="Number of candidate offspring produced per parent for EA+TPE.")
+                        help="Number of candidate offspring produced per parent for TPEC.")
     parser.add_argument("--tour_size", type = int, default = 5, 
                         help = "Tournament size for selection.")
     parser.add_argument("--mut_rate", type = float, default = 0.1,
                         help = "Mutation rate per gene.")
-    parser.add_argument('--dataset', type = int, choices = [0, 1, 2], default = 0, 
-                        help = "Index of the dataset to use for hyperparameter tuning.")
+    parser.add_argument('--task_id', type = int, default = 359959, 
+                        help = "OpenML task ID to use for hyperparameter tuning.")
     parser.add_argument("--logdir", type = str, default = "results",
                         help = "Directory to store logs and results.")
     parser.add_argument("--debug", type = bool, default = False,
-                        help = "For development purposes; runs may take longer when debug mode is enabled.")
+                        help = "Enable debug mode for development; runs may take longer.")
+    parser.add_argument("--method", type = str, choices = ['EA', 'TPEBO', 'TPEC'], default='TPEC',
+                        help = "Hyperparameter tuning method to use.")
+    parser.add_argument("--model", type = str, choices = ['RF', 'XGB'], default='RF',
+                        help = "Model to be used.")
     args = parser.parse_args()
 
+    rng_ = np.random.default_rng(args.seed)
+    X_train, y_train, X_test, y_test = load_task(task_id=args.task_id, data_dir="data")
+    param_space = param_space_factory(args.model, rng_)
+    
     config = Config(
         seed = args.seed,
         evaluations = args.evaluations,
@@ -33,26 +65,26 @@ def main():
         num_candidates = args.num_candidates,
         tour_size = args.tour_size,
         mut_rate  =  args.mut_rate,
-        dataset_idx = args.dataset,
-        logidr = args.logdir
+        task_id = args.task_id,
+        model = args.model,
         debug = args.debug,
+        rng = rng_
     )
 
-    # logger = Logger(
-    #     logdir = args.logdir
-    # )
+    logger = Logger(
+        logdir = args.logdir
+    )
 
-    # ea_solver = EA(config, logger)
-    # ea_solver.run() <---- TODO: provide x.train and y.train externally
+    if args.method == 'EA':
+        solver = EA(config, logger, param_space)
+    elif args.method == 'TPEBO':
+        solver = BO(config, logger, param_space, 'TPE', num_top_cand=1)
+    elif args.method == 'TPEC':
+        solver = TPEC(config, logger, param_space)
+    else:
+        raise ValueError(f"Unsupported method: {args.method}")
 
-    # tpe_solver = TPE(config, logger)
-    # tpe_solver.run() <---- TODO: provide x.train and y.train externally
-
-    # eatpe_solver = EATPE(config, logger)
-    # eatpe_solver.run() # <-- TODO: ^^^ same as above
-
-    # TODO: Maybe make a separate TPE-Optimizer or BO class, which calls TPE. TPE should only contain EI(), suggest(), etc. 
-
+    solver.run(X_train, y_train)
 
 if __name__ == "__main__":
     main()

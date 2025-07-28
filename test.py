@@ -1,9 +1,5 @@
-from ea import EA
-from tpe import TPE, MultivariateKDE, CategoricalPMF
-import numpy as np
-from config import Config
-from collections import Counter
-
+import os
+import pickle
 
 # # config = Config(dataset_idx=0)
 # # ea_solver = EA(config)
@@ -35,17 +31,36 @@ from collections import Counter
 # print(prob)
 
 
-# Univariate, 1D array
-MultivariateKDE(np.array([1, 2, 3, 4]))
+# # Univariate, 1D array
+# MultivariateKDE(np.array([1, 2, 3, 4]))
 
-# Univariate, shape (1, n)
-MultivariateKDE(np.array([[1, 2, 3, 4]]))
+# # Univariate, shape (1, n)
+# MultivariateKDE(np.array([[1, 2, 3, 4]]))
 
-# Multivariate, 2D
-MultivariateKDE(np.array([[1, 2, 3], [4, 5, 6]]))  # shape (2, 3)
+# # Multivariate, 2D
+# MultivariateKDE(np.array([[1, 2, 3], [4, 5, 6]]))  # shape (2, 3)
 
-# Degenerate, 1 sample
-MultivariateKDE(np.array([[1], [2]]))  # (2, 1)
+# # Degenerate, 1 sample
+# MultivariateKDE(np.array([[1], [2]]))  # (2, 1)
 
-# Constant data (singular covariance)
-MultivariateKDE(np.array([[1, 1, 1], [2, 2, 2]]))
+# # Constant data (singular covariance)
+# MultivariateKDE(np.array([[1, 1, 1], [2, 2, 2]]))
+
+
+#https://github.com/automl/ASKL2.0_experiments/blob/84a9c0b3af8f7ac6e2a003d4dea5e6dce97d4315/experiment_scripts/utils.py
+def load_task(task_id: int, data_dir: str, preprocess=True):
+    """ Loads and splits the chosen task. """
+    cached_data_path = f"{data_dir}/{task_id}_{preprocess}.pkl"
+    if os.path.exists(cached_data_path):
+        d = pickle.load(open(cached_data_path, "rb"))
+        X_train, y_train, X_test, y_test = d['X_train'], d['y_train'], d['X_test'], d['y_test']
+    else:
+        print(f'Task {task_id} not found')
+        exit(0)
+
+    return X_train, y_train, X_test, y_test
+
+X_train, y_train, X_test, y_test = load_task(task_id=359959, data_dir='data')
+
+print(X_train)
+print(y_train)

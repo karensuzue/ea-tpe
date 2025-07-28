@@ -2,7 +2,7 @@ import numpy as np
 import os
 import json
 from config import Config
-from organism import Organism
+from param_space import ModelParams
 from typing import List
 
 class Logger:
@@ -14,7 +14,7 @@ class Logger:
 
         self.ei_history = []
 
-    def log_generation(self, generation: int, evaluation: int, population: List[Organism], method: str) -> None:
+    def log_generation(self, generation: int, evaluation: int, population: List[ModelParams], method: str) -> None:
         best = min(population, key=lambda o: o.get_fitness())
         avg = np.mean([o.get_fitness() for o in population])
         median = np.median([o.get_fitness() for o in population])
@@ -22,7 +22,7 @@ class Logger:
         self.history.append((generation, evaluation, best.get_fitness(), avg, median, std))
         print(f"[LOG] Evaluation {evaluation} / Generation {generation}: {len(population)} organisms")
     
-    def log_best(self, population: List[Organism], config: Config, method: str) -> None:
+    def log_best(self, population: List[ModelParams], config: Config, method: str) -> None:
         """ Records the best hyperparameter in the current population. """
         population.sort(key=lambda o: o.get_fitness())
         self.best_org = population[0]
