@@ -83,6 +83,8 @@ class CategoricalPMF:
         - alpha: float
             Laplace smoothing parameter. Higher values increase the uniformity of the distribution.
         """
+        self.all_categories = all_categories
+
         # Count the frequency of each category in 'values'
         counts = Counter(values) 
         total = sum(counts[c] + alpha for c in all_categories)
@@ -161,6 +163,19 @@ class TPE(Surrogate):
             for i, name in enumerate(numeric_params_names)
         }
 
+        # Make sure parameters are rounded if int and within bounds
+        for name, info in param_space.param_space.items():
+            if info["type"] == "int":
+                params[name] = [
+                    int(np.clip(val, *info['bounds']))
+                    for val in params[name]
+                    ]
+            if info["type"] == "float":
+                params[name] = [
+                    np.clip(val, *info['bounds'])
+                    for val in params[name]
+                ]
+
         # Sample from the good categorical distribution
         for name, dist in self.cat_l.items():
             params[name] = dist.sample(num_samples)
@@ -169,7 +184,7 @@ class TPE(Surrogate):
 
         samples: List[Organism] = [] 
         for i in range(num_samples):
-            genotype = {name: params[name][i] for name in param_space}
+            genotype = {name: params[name][i] for name in param_space.param_space}
             org = Organism(param_space)
             org.set_genotype(genotype)
             samples.append(org)

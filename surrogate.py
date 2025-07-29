@@ -35,7 +35,7 @@ class Surrogate(ABC):
         pass
     
     @abstractmethod
-    def sample(self, num_samples: int, param_space: ModelParams) -> List[Organism]:
+    def sample(self, num_samples: int, param_space: ModelParams | None) -> List[Organism]:
         """
         Returns 'num_samples' samples
         param_space may be necessary to figure out which parameter a value belongs to. 

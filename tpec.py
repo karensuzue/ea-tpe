@@ -15,7 +15,7 @@ class TPEC:
         self.param_space = param_space
 
         self.ea = EA(config, logger, param_space) 
-        self.tpe = TPE()
+        self.tpe = TPE() # default gamma (splitting threshold)
 
         self.population: List[Organism] = []
 
@@ -78,7 +78,7 @@ class TPEC:
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)
 
         # For the final generation
-        self.population.sort(key=lambda o: o.get_fitness())
+        self.population.sort(key=lambda o: o.get_fitness()) # lowest first
         best_org = self.population[0]
         self.param_space.fix_parameters(best_org.get_genotype())
 

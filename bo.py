@@ -17,7 +17,7 @@ class BO:
         2. Fit a surrogate model to the observed data.
         3. Using an acquisition function to select the next candidate(s).
         4. Evaluate the selected candidate(s) on the objective function.
-        5. Add new data point(s) to the observations, and refit the surrogate model.
+        5. Add new data point(s) to the set of observations, and refit the surrogate model.
 
     In our system, the size of the initial observed set ('samples') is synonymous to EA's population size.
     """
@@ -74,7 +74,7 @@ class BO:
             # We randomly select enough candidates to keep the number of 'soft' evaluations consistent between BO and TPEC
             # We define 'soft' evaluations to be those performed on the surrogate
             # candidates = [Organism(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
-            candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand)
+            candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space)
 
             # Select the top candidate(s) for evaluation on the true objective
             best_org, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
