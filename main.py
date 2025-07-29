@@ -5,7 +5,6 @@ import pickle
 from config import Config
 from logger import Logger
 from ea import EA
-from tpe import TPE
 from bo import BO
 from tpec import TPEC
 from param_space import param_space_factory
@@ -38,7 +37,7 @@ def main():
                         help = "Population size.")
     parser.add_argument('--num_candidates', type=int, default=10,
                         help="Number of candidate offspring produced per parent for TPEC.")
-    parser.add_argument("--tour_size", type = int, default = 5, 
+    parser.add_argument("--tour_size", type = int, default = 2, 
                         help = "Tournament size for selection.")
     parser.add_argument("--mut_rate", type = float, default = 0.1,
                         help = "Mutation rate per gene.")
@@ -55,7 +54,7 @@ def main():
     args = parser.parse_args()
 
     rng_ = np.random.default_rng(args.seed)
-    X_train, y_train, X_test, y_test = load_task(task_id=args.task_id, data_dir="data")
+    X_train, y_train, X_test, y_test = load_task(task_id = args.task_id, data_dir = "data")
     param_space = param_space_factory(args.model, rng_)
     
     config = Config(
@@ -66,7 +65,9 @@ def main():
         tour_size = args.tour_size,
         mut_rate  =  args.mut_rate,
         task_id = args.task_id,
+        logdir = args.logdir,
         model = args.model,
+        method = args.method,
         debug = args.debug,
         rng = rng_
     )
@@ -78,7 +79,7 @@ def main():
     if args.method == 'EA':
         solver = EA(config, logger, param_space)
     elif args.method == 'TPEBO':
-        solver = BO(config, logger, param_space, 'TPE', num_top_cand=1)
+        solver = BO(config, logger, param_space, 'TPE', num_top_cand = 1)
     elif args.method == 'TPEC':
         solver = TPEC(config, logger, param_space)
     else:

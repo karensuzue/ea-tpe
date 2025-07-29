@@ -1,5 +1,6 @@
 import numpy as np
 from organism import Organism
+from param_space import ModelParams
 from abc import ABC, abstractmethod
 from typeguard import typechecked
 from typing import List, Tuple
@@ -10,7 +11,7 @@ class Surrogate(ABC):
     Pluggable surrogate model for the Bayesian Optimizer.
     """
     @abstractmethod
-    def fit(self, samples: List[Organism]):
+    def fit(self, samples: List[Organism], param_space: ModelParams) -> None:
         """ 
         Fit the model to a set of observations.
 
@@ -19,7 +20,7 @@ class Surrogate(ABC):
         pass
 
     @abstractmethod
-    def suggest(self, candidates: List[Organism], num_top_cand: int) -> Tuple[List[Organism], np.ndarray, int]:
+    def suggest(self, param_space: ModelParams, candidates: List[Organism], num_top_cand: int) -> Tuple[List[Organism], np.ndarray, int]:
         """
         Suggest the top candidate(s) after ranking them according to an acquisition score.
 
@@ -32,3 +33,10 @@ class Surrogate(ABC):
                                                         and the number of soft evaluations performed.
         """
         pass
+    
+    @abstractmethod
+    def sample(self, num_samples: int, param_space: ModelParams) -> List[Organism]:
+        """
+        Returns 'num_samples' samples
+        param_space may be necessary to figure out which parameter a value belongs to. 
+        """

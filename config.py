@@ -10,7 +10,9 @@ class Config:
     tour_size: int
     mut_rate: float
     task_id: int
+    logdir: str
     model: str
+    method: str
     debug: bool
     rng: np.random.default_rng
 

@@ -2,7 +2,7 @@ import numpy as np
 import os
 import json
 from config import Config
-from param_space import ModelParams
+from organism import Organism
 from typing import List
 
 class Logger:
@@ -14,7 +14,7 @@ class Logger:
 
         self.ei_history = []
 
-    def log_generation(self, generation: int, evaluation: int, population: List[ModelParams], method: str) -> None:
+    def log_generation(self, generation: int, evaluation: int, population: List[Organism], method: str) -> None:
         best = min(population, key=lambda o: o.get_fitness())
         avg = np.mean([o.get_fitness() for o in population])
         median = np.median([o.get_fitness() for o in population])
@@ -22,17 +22,23 @@ class Logger:
         self.history.append((generation, evaluation, best.get_fitness(), avg, median, std))
         print(f"[LOG] Evaluation {evaluation} / Generation {generation}: {len(population)} organisms")
     
-    def log_best(self, population: List[ModelParams], config: Config, method: str) -> None:
+    def log_best(self, best_org: Organism, config: Config, method: str) -> None:
         """ Records the best hyperparameter in the current population. """
-        population.sort(key=lambda o: o.get_fitness())
-        self.best_org = population[0]
+        self.best_org = best_org
+        best_genotype = self.best_org.get_genotype()
+
+        # Boolean values can't be written to JSON, so we convert them to type string
+        for name, val in best_genotype.items():
+            if isinstance(val, (bool, np.bool_)):
+                best_genotype[name] = str(val)
+
         self.best_org_data = {
-            "dataset": config.get_dataset_id(),
-            "replicate": config.get_seed(),
-            "evaluations": config.get_evaluations(),
+            "dataset": config.task_id,
+            "replicate": config.seed,
+            "evaluations": config.evaluations,
             "method": method,
             "final_cv_accuracy_score": self.best_org.get_fitness(),
-            "params": self.best_org.get_genome()
+            "params": best_genotype
         }
     
     def log_ei(self, generation: int, evaluation: int, ei_scores: np.ndarray):
@@ -42,8 +48,8 @@ class Logger:
         self.ei_history.append((generation, evaluation, avg_ei, max_ei, std_ei))
 
     def save(self, config: Config, method: str) -> None:
-        dataset = config.get_dataset_id()
-        seed = config.get_seed()
+        dataset = config.task_id
+        seed = config.seed
         os.makedirs(f"{self.logdir}_dataset{dataset}", exist_ok=True)
         with open(f"{self.logdir}_dataset{dataset}/log_{method}_{seed}.csv", "w") as f:
             f.write("generation,evaluation,best,average,median,std\n")

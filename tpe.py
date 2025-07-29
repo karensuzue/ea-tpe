@@ -4,7 +4,7 @@ from surrogate import Surrogate
 from param_space import ModelParams
 from collections import Counter
 from scipy.stats import gaussian_kde
-from typing import Tuple, Dict, List, Union, Iterable
+from typing import Tuple, Dict, List, Union, Iterable, Any
 from typeguard import typechecked
 
 @typechecked
@@ -58,8 +58,12 @@ class MultivariateKDE:
         # Returns an array of shape (m,), corresponding to 1 density value per point   
         return np.maximum(self.kde.pdf(vec), self.eps)  
     
-    def sample(n_samples=1):
-        pass
+    def sample(self, n_samples = 1) -> np.ndarray:
+        """ 
+        Sample n new points from the estimated distribution. 
+        Returns a matrix of shape (dimensions, n_samples)
+        """
+        return self.kde.resample(size=n_samples) # shape (dimensions, n_samples)
 
 class CategoricalPMF:
     """ 
@@ -68,7 +72,8 @@ class CategoricalPMF:
     ensuring all categories have non-zero likelihood (with smoothing factor 'alpha').
     """
 
-    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool], alpha = 1.0):
+    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str] | Tuple[bool], 
+                 alpha = 1.0):
         """
         Parameters:
         - values: Iterable[str]
@@ -95,9 +100,9 @@ class CategoricalPMF:
         """
         return self.prob.get(x, self.eps)
 
-    def sample(self, n_samples=1) -> List[str] | List[bool]:
+    def sample(self, n_samples = 1) -> List[str] | List[bool]:
         """
-        Sample one or more values from the categorical PMF.
+        Sample n categories from the categorical PMF.
 
         Parameters:
             n_samples (int): Number of samples to draw.
@@ -125,17 +130,52 @@ class TPE(Surrogate):
         self.gamma = gamma # splitting parameter
 
         # Fitted distributions
-        self.multi_l: MultivariateKDE = None 
-        self.multi_g: MultivariateKDE = None 
-        self.cat_l: Dict[str, CategoricalPMF] = {} 
-        self.cat_g: Dict[str, CategoricalPMF] = {}
+        self.multi_l: MultivariateKDE = None # good, numeric
+        self.multi_g: MultivariateKDE = None  # bad, numeric
+        self.cat_l: Dict[str, CategoricalPMF] = {} # good, categorical
+        self.cat_g: Dict[str, CategoricalPMF] = {} # bad, categorical
     
-    def sample_from_good_distribution(self, num_samples: int):
+    def sample(self, num_samples: int, param_space: ModelParams) -> List[Organism]:
         """
-        TODO
-        Returns 'num_samples' samples
+        Returns 'num_samples' Organisms. 
+        For each Organism's genotype, sample from the MultivariateKDE and CategoricalPMFs separately, 
+        then reassemble into a full set of hyperparameters.
         """
-        pass
+        numeric_params = {
+            **param_space.get_params_by_type('int'),
+            **param_space.get_params_by_type('float'),
+        }
+
+        numeric_params_names = list(numeric_params.keys())
+
+        # params: Dict[str, Any] = {} # shape (dimensions, n_samples)
+
+        # Sample from the good numeric distribution 
+        multi_samples = self.multi_g.sample(num_samples) # shape (dimensions, n_samples)
+        assert multi_samples.shape[0] == len(numeric_params_names)
+        assert multi_samples.shape[1] == num_samples
+
+        # Align numeric parameter names to each dimension
+        params = {
+            name: list(multi_samples[i])
+            for i, name in enumerate(numeric_params_names)
+        }
+
+        # Sample from the good categorical distribution
+        for name, dist in self.cat_l.items():
+            params[name] = dist.sample(num_samples)
+        
+        assert all(len(v) == num_samples for v in params.values())
+
+        samples: List[Organism] = [] 
+        for i in range(num_samples):
+            genotype = {name: params[name][i] for name in param_space}
+            org = Organism(param_space)
+            org.set_genotype(genotype)
+            samples.append(org)
+
+        assert(len(samples) == num_samples)
+        return samples
 
     def split_samples(self, samples: List[Organism]) -> Tuple[List[Organism], List[Organism]]:
         """ 
@@ -176,12 +216,13 @@ class TPE(Surrogate):
         }
 
         # For each sample set, extract values of numeric hyperparameters
-        # Format: [[value11, value12,...], [value21, value22, ...], ...]
+        # Format shape (n_params, n_samples): [[value11, value12,...], [value21, value22, ...], ...]
+        # Each parameter has its own row 
         good_num_samples = np.array([[o.get_genotype()[param_name] for o in good_samples] 
-                            for param_name, _ in numeric_params.items()])
+                            for param_name in numeric_params])
         bad_num_samples = np.array([[o.get_genotype()[param_name] for o in bad_samples] 
-                            for param_name, _ in numeric_params.items()])
-
+                            for param_name in numeric_params])
+        
         # Fit Multivariate KDEs
         self.multi_l = MultivariateKDE(good_num_samples)
         self.multi_g = MultivariateKDE(bad_num_samples)
@@ -195,21 +236,21 @@ class TPE(Surrogate):
             param_name: CategoricalPMF(
                 # Extract categorical values from samples in (d, n) format
                 values = [o.get_genotype()[param_name] for o in good_samples],
-                all_categories = param_space[param_name]["bounds"]
+                all_categories = info["bounds"]
             )
-            for param_name, _ in categorical_params.items()
+            for param_name, info in categorical_params.items()
         }
 
         self.cat_g = {
             param_name : CategoricalPMF(
                 values = [o.get_genotype()[param_name] for o in bad_samples],
-                all_categories = param_space[param_name]["bounds"]
+                all_categories = info["bounds"]
             )
-            for param_name, _ in categorical_params.items()
+            for param_name, info in categorical_params.items()
         }
 
 
-    def expected_improvement(self, candidates: List[Organism], param_space: ModelParams) -> np.ndarray:
+    def expected_improvement(self, param_space: ModelParams, candidates: List[Organism]) -> np.ndarray:
         """
         Compute the expected improvement (EI) for a list of candidate organisms.
 
@@ -225,19 +266,15 @@ class TPE(Surrogate):
             **param_space.get_params_by_type('int'),
             **param_space.get_params_by_type('float'),
         }
-        categorical_params = {
-            **param_space.get_params_by_type('cat'),
-            **param_space.get_params_by_type('bool')
-        }
 
         for org in candidates:
             genotype = org.get_genotype()
             # Numeric contribution (multivariate)
             if numeric_params:
-                num_vals = [genotype[param_name] for param_name, _ in numeric_params.items()] # (, d_num)
+                num_vals = [genotype[param_name] for param_name in numeric_params] # (, d_num)
                 # 'num_vals' gets reshaped into (d_num, 1) here
                 l_num = float(self.multi_l.pdf(num_vals)) # a single density value
-                g_num = float(self.multi_g.pdf(num_vals))
+                g_num = float(self.multi_g.pdf(num_vals)) 
             else: # If no numeric parameters exist, no contribution
                 l_num = g_num = 1.0 
             
@@ -258,7 +295,7 @@ class TPE(Surrogate):
             org.set_ei((l_num * l_cat) / (g_num * g_cat))
         return np.asarray(ei_scores)
 
-    def suggest(self, candidates: List[Organism], num_top_cand: int = 1) -> Tuple[List[Organism], np.ndarray, int]:
+    def suggest(self, param_space: ModelParams, candidates: List[Organism], num_top_cand: int = 1) -> Tuple[List[Organism], np.ndarray, int]:
         """ 
         Suggest the top-k candidates based on expected improvement.
 
@@ -270,7 +307,7 @@ class TPE(Surrogate):
             Tuple[List[Organism], np.ndarray, int]: A tuple containing the top candidates, their EI scores, and
             the number of soft evaluations performed. 
         """
-        scores = self.expected_improvement(candidates)
+        scores = self.expected_improvement(param_space, candidates)
 
         soft_eval_count = len(scores)
 

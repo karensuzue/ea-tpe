@@ -21,8 +21,6 @@ class Organism:
 
         # Initialize genotype, a set of random hyperparameters ({parameter_name: value})
         self.genotype: Dict[str, Any] = self.param_space.generate_random_parameters()
-        # Make sure parameter values align with scikit-learn's requirements
-        self.param_space.fix_parameters(self.genotype)
 
     def __repr__(self):
         return f"Organism(genotype={self.genotype}, fitness={self.fitness})"

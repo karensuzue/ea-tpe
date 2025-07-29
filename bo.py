@@ -6,7 +6,7 @@ from organism import Organism
 from surrogate import Surrogate
 from tpe import TPE
 from typeguard import typechecked
-from typing import Tuple, Dict, List, Union, Literal
+from typing import Tuple, Dict, List, Literal
 
 @typechecked
 class BO:
@@ -66,17 +66,18 @@ class BO:
         for gen in range(generations):
             # Log best, average, and median objective values in the current sample set
             self.logger.log_generation(gen, self.config.pop_size + gen * self.num_top_cand, 
-                                       self.samples, f"BO{self.surrogate_type}")
+                                       self.samples, f"{self.surrogate_type}BO")
 
             # Fit the surrogate to the observed data
-            self.surrogate.fit(self.samples)
+            self.surrogate.fit(self.samples, self.param_space)
 
             # We randomly select enough candidates to keep the number of 'soft' evaluations consistent between BO and TPEC
             # We define 'soft' evaluations to be those performed on the surrogate
-            candidates = [Organism(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
+            # candidates = [Organism(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
+            candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand)
 
             # Select the top candidate(s) for evaluation on the true objective
-            best_org, ei_scores, soft_eval_count = self.surrogate.suggest(candidates, self.num_top_cand)
+            best_org, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
             assert(len(best_org) == self.num_top_cand)
             if self.config.debug: self.soft_eval_count += soft_eval_count
 
@@ -91,12 +92,17 @@ class BO:
             # Update sample set
             self.samples += best_org
 
+        # For the final generation
+        self.samples.sort(key=lambda o: o.get_fitness())
+        best_org = self.samples[0]
+        self.param_space.fix_parameters(best_org.get_genotype())
+
         # Log best, average, and median objective values in the final sample set
-        self.logger.log_generation(gen, self.config.pop_size + generations * self.num_top_cand, 
-                                   self.samples, f"BO{self.surrogate_type}")
+        self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand, 
+                                   self.samples, f"{self.surrogate_type}BO")
         # Log the best observed hyperparameter configuration across all iterations
-        self.logger.log_best(self.samples, self.config, f"BO{self.surrogate_type}")
-        self.logger.save(self.config, f"BO{self.surrogate_type}")
+        self.logger.log_best(best_org, self.config, f"{self.surrogate_type}BO")
+        self.logger.save(self.config, f"{self.surrogate_type}BO")
 
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}")

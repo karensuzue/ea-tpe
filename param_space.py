@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from typeguard import typechecked
+import copy
 from typing import Tuple, Dict, List, TypedDict, Any, Literal, Union
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
@@ -38,7 +39,7 @@ class ModelParams(ABC):
     def __init__(self, param_space: ParamSpace, rng: np.random.default_rng):
         # self.random_state = random_state  # random_state is a seed
         self.param_space = param_space 
-        self.rng = rng
+        self.rng = rng # already seeded
 
     def get_parameter_space(self) -> ParamSpace:
         """ Returns the parameter space. """
@@ -59,7 +60,7 @@ class ModelParams(ABC):
         pass
 
     @abstractmethod
-    def get_params_by_type(self, type: str) -> Dict[str, Any]:
+    def get_params_by_type(self, type: str) -> ParamSpace:
         """ Retrieves a subset of parameters of a given type. """
         pass
 
@@ -72,13 +73,9 @@ class ModelParams(ABC):
         # 99.7% of increases/decreases will be within 15% of the
         value = float(cur_value * self.rng.normal(1.0, 0.05))
 
-        # ensure the value is within the bounds
-        if value < min:
-            return min
-        elif value > max:
-            return max
-        else:
-            return value
+        # ensure the value is within the bounds, clip to safe boundaries
+        eps = 1e-12
+        return np.clip(value, min + eps, max - eps)
 
     # function to shift integer parameters either up or down
     def shift_int_parameter(self, cur_value: int, min: int, max: int) -> int:
@@ -98,7 +95,7 @@ class ModelParams(ABC):
             return value
 
     # function to pick a new value from a categorical parameter
-    def pick_categorical_parameter(self, choices: List):
+    def pick_categorical_parameter(self, choices: List | Tuple):
         """ Picks a random value from a list of categorical choices. """
         # rng = np.random.default_rng(rng_)
         # pick a new value from the choices
@@ -112,7 +109,7 @@ class ModelParams(ABC):
     # function to fix any parameters that do not align with scikit-learn's requirements
     @abstractmethod
     def fix_parameters(self, model_params: Dict[str, Any]) -> None:
-        """ Fixes parameters that do not align with scikit-learn's requirements. """
+        """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
         pass
 
     @abstractmethod
@@ -153,17 +150,23 @@ class RandomForestParams(ModelParams):
                 if spec["type"] == "int":
                     model_params[name] = self.shift_int_parameter(int(model_params[name]), spec['bounds'][0], spec['bounds'][1])
                 elif spec["type"] == "float":
-                    model_params[name] = self.shift_float_parameter(float(model_params[name]), spec['bounds'][0], spec['bounds'][1])
+                    # If "max_samples" is None from "bootstrap" == False, randomly pick a number for "max_samples"
+                    # UPDATE: we handle this in evaluation, and fixes parameters at the end. 
+                    # This means that if "bootstrap" == False, "max_samples" is effectively an intron, we disregard its values.
+                    # if name == "max_samples" and model_params[name] is None:
+                    #     model_params[name] = float(self.rng.uniform(*spec['bounds']))
+                    # else:
+                        model_params[name] = self.shift_float_parameter(float(model_params[name]), spec['bounds'][0], spec['bounds'][1])
                 elif spec["type"] in ["cat", "bool"]:
                     model_params[name] = self.pick_categorical_parameter(spec['bounds'])
 
         # Fix the parameters to ensure they are valid
-        self.fix_parameters(model_params)
+        # self.fix_parameters(model_params)
     
     
     def generate_random_parameters(self) -> Dict[str, Any]:
         """
-        Generate a random set of parameters based on the defined parameter space.
+        Generates a random set of parameter values based on the defined parameter space.
 
         Parameters:
             rng_ (np.random.default_rng): A NumPy random generator instance.
@@ -176,6 +179,10 @@ class RandomForestParams(ModelParams):
                 rand_genotype[param_name] = int(self.rng.integers(*spec["bounds"]))
             elif spec["type"] == "float":
                 rand_genotype[param_name] = float(self.rng.uniform(*spec["bounds"]))
+            # elif spec["type"] == "cat":
+            #     rand_genotype[param_name] = str(self.rng.choice(spec["bounds"]))
+            # elif spec["type"] == "bool":
+            #     rand_genotype[param_name] = bool(self.rng.choice(spec["bounds"]))
             elif spec["type"] in {"cat", "bool"}:
                 rand_genotype[param_name] = self.rng.choice(spec["bounds"])
             else:
@@ -187,7 +194,7 @@ class RandomForestParams(ModelParams):
         # This should automatically raise a KeyError if 'key' does not exist
         return self.param_space[key]['type']
     
-    def get_params_by_type(self, type: str) -> Dict[str, Any]:
+    def get_params_by_type(self, type: str) -> ParamSpace:
         """ Retrieves a subset of parameters of a given type. """
         if type not in ['int', 'float', 'cat', 'bool']:
             raise ValueError(f"Unsupported parameter type: {type}")
@@ -195,9 +202,11 @@ class RandomForestParams(ModelParams):
                 if info['type'] == type}
 
     def fix_parameters(self, model_params: Dict[str, Any]) -> None:
+        """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
         # if bootstrap is False, we need to set max_samples to None
         if not model_params['bootstrap']:
             model_params['max_samples'] = None
+
         return
     
     def eval_parameters(self, model_params: Dict[str, Any], X_train, y_train) -> float:
@@ -207,8 +216,12 @@ class RandomForestParams(ModelParams):
         Parameters:
             model_params (Dict[str, Any]): The set of hyperparameters to evaluate.
         """
+        # "fix_parameters()" changes "model_params" in-place, so a copy must be made
+        # We also must retain the original "model_params" for TPE's fit()
+        model_params_copy = copy.deepcopy(model_params)
+        self.fix_parameters(model_params_copy)
         # Must use the same seed/random_state across experiments, to maintain the same CV splits 
-        model = RandomForestClassifier(**model_params, random_state=0)
+        model = RandomForestClassifier(**model_params_copy, random_state=0)
         score = cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy').mean() 
         return score
 
