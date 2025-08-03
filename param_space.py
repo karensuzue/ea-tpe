@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from typeguard import typechecked
-import copy
 from typing import Tuple, Dict, List, TypedDict, Any, Literal, Union
-from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import RandomForestClassifier
+
 
 # Defining custom type alias
 # I believe TypedDict maps the dictionary strings to these keys
@@ -201,7 +199,8 @@ class RandomForestParams(ModelParams):
         return {name: info for name, info in self.param_space.items() 
                 if info['type'] == type}
 
-    def fix_parameters(self, model_params: Dict[str, Any]) -> None:
+    @staticmethod
+    def fix_parameters(model_params: Dict[str, Any]) -> None:
         """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
         # if bootstrap is False, we need to set max_samples to None
         if not model_params['bootstrap']:
@@ -209,28 +208,5 @@ class RandomForestParams(ModelParams):
 
         return
     
-    def eval_parameters(self, model_params: Dict[str, Any], X_train, y_train) -> float:
-        """ 
-        Evaluates a given set of hyperparameters on cross-validated accuracy.
-
-        Parameters:
-            model_params (Dict[str, Any]): The set of hyperparameters to evaluate.
-        """
-        # "fix_parameters()" changes "model_params" in-place, so a copy must be made
-        # We also must retain the original "model_params" for TPE's fit()
-        model_params_copy = copy.deepcopy(model_params)
-        self.fix_parameters(model_params_copy)
-        # Must use the same seed/random_state across experiments, to maintain the same CV splits 
-        model = RandomForestClassifier(**model_params_copy, random_state=0)
-        score = cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy').mean() 
-        return score
 
 
-
-def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
-    if model == 'RF':
-        return RandomForestParams(rng)
-    # elif model == 'XGBoost': # TENTATIVE
-    #     return XGBoostParams(seed)
-    else:
-        raise ValueError(f"Unsupported model: {model}")

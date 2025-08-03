@@ -1,5 +1,5 @@
 import numpy as np
-from organism import Organism
+from individual import Individual
 from surrogate import Surrogate
 from param_space import ModelParams
 from collections import Counter
@@ -32,7 +32,6 @@ class MultivariateKDE:
         if data.shape[1] == 1:
             data = np.hstack([data, data + 1e-3]) # duplicate it slightly
         
-        # TODO: If number of numeric hyperparameters = 1, otherwise dont run this
         # Check if covariance matrix is singular: must have >1 distinct samples
         if np.linalg.matrix_rank(np.cov(data)) < data.shape[0]:
             # Add small noise to escape colinearity
@@ -137,10 +136,10 @@ class TPE(Surrogate):
         self.cat_l: Dict[str, CategoricalPMF] = {} # good, categorical
         self.cat_g: Dict[str, CategoricalPMF] = {} # bad, categorical
     
-    def sample(self, num_samples: int, param_space: ModelParams) -> List[Organism]:
+    def sample(self, num_samples: int, param_space: ModelParams) -> List[Individual]:
         """
-        Returns 'num_samples' Organisms. 
-        For each Organism's genotype, sample from the MultivariateKDE and CategoricalPMFs separately, 
+        Returns 'num_samples' Individuals. 
+        For each Individual's params, sample from the "good" MultivariateKDE and CategoricalPMFs separately, 
         then reassemble into a full set of hyperparameters.
         """
         numeric_params = {
@@ -154,8 +153,8 @@ class TPE(Surrogate):
 
         # Sample from the good numeric distribution 
         multi_samples = self.multi_g.sample(num_samples) # shape (dimensions, n_samples)
-        assert multi_samples.shape[0] == len(numeric_params_names)
-        assert multi_samples.shape[1] == num_samples
+        assert(multi_samples.shape[0] == len(numeric_params_names))
+        assert(multi_samples.shape[1] == num_samples)
 
         # Align numeric parameter names to each dimension
         params = {
@@ -182,38 +181,38 @@ class TPE(Surrogate):
         
         assert all(len(v) == num_samples for v in params.values())
 
-        samples: List[Organism] = [] 
+        samples: List[Individual] = [] 
         for i in range(num_samples):
-            genotype = {name: params[name][i] for name in param_space.param_space}
-            org = Organism(param_space)
-            org.set_genotype(genotype)
-            samples.append(org)
+            # Map name to a single value
+            ind_params = {name: params[name][i] for name in param_space.param_space} 
+            ind = Individual(ind_params)
+            samples.append(ind)
 
         assert(len(samples) == num_samples)
         return samples
 
-    def split_samples(self, samples: List[Organism]) -> Tuple[List[Organism], List[Organism]]:
+    def split_samples(self, samples: List[Individual]) -> Tuple[List[Individual], List[Individual]]:
         """ 
         Splits a given sample set into 'good' and 'bad' groups based on
         the objective.
         
         Parameters: 
-            samples (List[Organism]): The sample set to split.
+            samples (List[Individual]): The sample set to split.
 
         Returns:
-            Tuple[List[Organism], List[Organism]]: a tuple containing the good and bad sample groups.
+            Tuple[List[Individual], List[Individual]]: a tuple containing the good and bad sample groups.
         """
         if len(samples) < 2:
             raise RuntimeError("Need at least 2 samples before TPE can fit.")
         
         # Sort population/samples set (lowest/best first)
-        samples.sort(key=lambda o: o.get_fitness())
+        samples.sort(key=lambda o: o.get_performance())
         split_idx = max(1, int(len(samples) * self.gamma))
         good_samples = samples[:split_idx]
         bad_samples = samples[split_idx:]
         return good_samples, bad_samples
     
-    def fit(self, samples: List[Organism], param_space: ModelParams) -> None:
+    def fit(self, samples: List[Individual], param_space: ModelParams) -> None:
         """ 
         Fit probabilistic models (KDEs and PMFs) to the good and bad sample groups.
         
@@ -233,9 +232,9 @@ class TPE(Surrogate):
         # For each sample set, extract values of numeric hyperparameters
         # Format shape (n_params, n_samples): [[value11, value12,...], [value21, value22, ...], ...]
         # Each parameter has its own row 
-        good_num_samples = np.array([[o.get_genotype()[param_name] for o in good_samples] 
+        good_num_samples = np.array([[o.get_params()[param_name] for o in good_samples] 
                             for param_name in numeric_params])
-        bad_num_samples = np.array([[o.get_genotype()[param_name] for o in bad_samples] 
+        bad_num_samples = np.array([[o.get_params()[param_name] for o in bad_samples] 
                             for param_name in numeric_params])
         
         # Fit Multivariate KDEs
@@ -250,7 +249,7 @@ class TPE(Surrogate):
         self.cat_l = {
             param_name: CategoricalPMF(
                 # Extract categorical values from samples in (d, n) format
-                values = [o.get_genotype()[param_name] for o in good_samples],
+                values = [o.get_params()[param_name] for o in good_samples],
                 all_categories = info["bounds"]
             )
             for param_name, info in categorical_params.items()
@@ -258,20 +257,20 @@ class TPE(Surrogate):
 
         self.cat_g = {
             param_name : CategoricalPMF(
-                values = [o.get_genotype()[param_name] for o in bad_samples],
+                values = [o.get_params()[param_name] for o in bad_samples],
                 all_categories = info["bounds"]
             )
             for param_name, info in categorical_params.items()
         }
 
 
-    def expected_improvement(self, param_space: ModelParams, candidates: List[Organism]) -> np.ndarray:
+    def expected_improvement(self, param_space: ModelParams, candidates: List[Individual]) -> np.ndarray:
         """
-        Compute the expected improvement (EI) for a list of candidate organisms.
+        Compute the expected improvement (EI) for a list of candidate individuals.
 
         Parameters:
-        - candidates: List[Organism]
-            Candidate organisms to evaluate
+        - candidates: List[Individual]
+            Candidate individuals to evaluate
         
         Returns an array of EI scores, one per candidate.
         """
@@ -282,11 +281,11 @@ class TPE(Surrogate):
             **param_space.get_params_by_type('float'),
         }
 
-        for org in candidates:
-            genotype = org.get_genotype()
+        for ind in candidates:
+            params = ind.get_params()
             # Numeric contribution (multivariate)
             if numeric_params:
-                num_vals = [genotype[param_name] for param_name in numeric_params] # (, d_num)
+                num_vals = [params[param_name] for param_name in numeric_params] # (, d_num)
                 # 'num_vals' gets reshaped into (d_num, 1) here
                 l_num = float(self.multi_l.pdf(num_vals)) # a single density value
                 g_num = float(self.multi_g.pdf(num_vals)) 
@@ -297,8 +296,8 @@ class TPE(Surrogate):
             l_cat = g_cat = 1.0
             # PMFs are univariate
             for param_name, pmf_l in self.cat_l.items():
-                lx = pmf_l.pmf(genotype[param_name]) # a single density
-                gx = self.cat_g[param_name].pmf(genotype[param_name])
+                lx = pmf_l.pmf(params[param_name]) # a single density
+                gx = self.cat_g[param_name].pmf(params[param_name])
                 l_cat *= lx
                 g_cat *= gx
             
@@ -307,19 +306,19 @@ class TPE(Surrogate):
                 ei_scores.append(0.0)
             else:
                 ei_scores.append((l_num * l_cat) / (g_num * g_cat))
-            org.set_ei((l_num * l_cat) / (g_num * g_cat))
+            ind.set_ei((l_num * l_cat) / (g_num * g_cat))
         return np.asarray(ei_scores)
 
-    def suggest(self, param_space: ModelParams, candidates: List[Organism], num_top_cand: int = 1) -> Tuple[List[Organism], np.ndarray, int]:
+    def suggest(self, param_space: ModelParams, candidates: List[Individual], num_top_cand: int = 1) -> Tuple[List[Individual], np.ndarray, int]:
         """ 
         Suggest the top-k candidates based on expected improvement.
 
         Parameters:
-            candidates (List[Organism]): Candidate organisms to rank.
+            candidates (List[Individual]): Candidate individuals to rank.
             num_top_cand (int): Number of top candidates to return. 
 
         Returns:
-            Tuple[List[Organism], np.ndarray, int]: A tuple containing the top candidates, their EI scores, and
+            Tuple[List[Individual], np.ndarray, int]: A tuple containing the top candidates, their EI scores, and
             the number of soft evaluations performed. 
         """
         scores = self.expected_improvement(param_space, candidates)

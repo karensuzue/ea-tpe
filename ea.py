@@ -1,12 +1,12 @@
 import numpy as np
-# import ray
 import copy
 from config import Config
 from logger import Logger
-from organism import Organism
+from individual import Individual
 from param_space import ModelParams
 from typeguard import typechecked
 from typing import List
+from utils import eval_factory, eval_final_factory
 
 @typechecked
 class EA:
@@ -19,76 +19,106 @@ class EA:
 
         self.param_space = param_space
         
-        self.population: List[Organism] = []
+        self.population: List[Individual] = []
 
         # For debugging
         self.hard_eval_count = 0 # evaluations on the true objective
 
-    def get_population(self) -> List[Organism]:
+    def get_population(self) -> List[Individual]:
         return self.population
     
-    def set_population(self, population: List[Organism]):
+    def set_population(self, population: List[Individual]):
         self.population = population
+    
+    def tournament_selection(self, population: List[Individual], performances: np.ndarray | List[float]) -> Individual:
+        """
+        Selects a single parent using tournament selection.
 
-    def make_offspring(self, population: List[Organism], num_offspring: int) -> List[Organism]:
+        Parameters:
+            population (List[Individual]): A population of individuals to select from.
+            performances: The list of performance values corresponding to the individuals in the population
+                (Must have the same ordering). This serves to avoid redundant computations. 
+        Returns:
+            Individual: a single parent individual.
+
+        """
+        assert(len(population) == len(performances))
+
+        # Randomly choose a tour_size number of indices (determined by config)
+        indices = self.config.rng.choice(len(population), self.config.tour_size, replace=False)
+        # Extract performances at the chosen indices
+        extracted_performances = performances[indices]
+        # Get the position of the best (lowest) performance in the tournament (not population-based index)
+        best_tour_idx = np.argmin(extracted_performances)
+        # Get the best individual among tournament contestants, the parent
+        parent = population[indices[best_tour_idx]]
+        return parent
+
+
+    def make_offspring(self, population: List[Individual], num_offspring: int) -> List[Individual]:
         """ 
         Produce offspring asexually from a given population. 
         Parents are chosen using tournament selection.
         
         Parameters:
-            population (List[Organism]):
-            num_offspring (int): 
+            population (List[Individual]): A population of individuals to select from.
+            num_offspring (int): The number of offspring to produce.
         """
         offspring = []
-        # Assume organisms are already evaluated...
-        fitnesses = np.array([org.get_fitness() for org in self.population])
+        # Assume individuals are already evaluated...
+        performances = np.array([ind.get_performance() for ind in self.population])
         for _ in range(num_offspring): 
-            # Randomly choose a tour_size number of indices
-            indices = self.config.rng.choice(len(self.population), self.config.tour_size, replace=False)
-            # Extract fitnesses at the chosen indices
-            extracted_fitnesses = fitnesses[indices]
-            # Get the position of the best (lowest) fitness in tournament (not population-based index)
-            best_tour_idx = np.argmin(extracted_fitnesses)
-            
-            # Get the best individual among tournament contestants, the parent
-            parent = population[indices[best_tour_idx]]
+            # Select a single parent using tournament selection
+            parent = self.tournament_selection(population, performances)
 
             # In-place mutation, deep copy required 
             child = copy.deepcopy(parent)
-            self.param_space.mutate_parameters(child.get_genotype(), self.config.mut_rate)
+            self.param_space.mutate_parameters(child.get_params(), self.config.mut_rate)
 
             offspring.append(child)
+        
         assert(len(offspring) == num_offspring)
         return offspring
 
     # Run "default" EA 
-    # @ray.remote
-    def run(self, X_train, y_train) -> None:
-        # Initialize population with random organisms
-        self.population = [Organism(self.param_space) for _ in range(self.config.pop_size)]
+    def run(self, X_train, y_train, X_test, y_test) -> None:
+        # Initialize population with random individuals
+        self.population = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
-        for org in self.population:
-            org.set_fitness(-1 * self.param_space.eval_parameters(org.get_genotype(), X_train, y_train))
+        # Evaluate population
+        for ind in self.population:
+            ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
             if self.config.debug: self.hard_eval_count += 1
 
+        # Start evolution
         generations = (self.config.evaluations // self.config.pop_size) - 1
         for gen in range(generations):
             self.logger.log_generation(gen, self.config.pop_size * (gen + 1), self.population, "EA")
 
+            # Produce offspring (parents may be carried over unchanged, we consider them to be new offspring regardless)
             self.population = self.make_offspring(self.population, self.config.pop_size)
             
-            for org in self.population:
-                org.set_fitness(-1 * self.param_space.eval_parameters(org.get_genotype(), X_train, y_train))
+            # Evaluate offspring
+            for ind in self.population:
+                ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
                 if self.config.debug: self.hard_eval_count += 1
 
         # For the final generation
-        self.population.sort(key=lambda o: o.get_fitness()) # ascending order
-        best_org = self.population[0]
-        self.param_space.fix_parameters(best_org.get_genotype())
+        self.population.sort(key=lambda o: o.get_performance()) # ascending order
+        best_ind = self.population[0]
+        self.param_space.fix_parameters(best_ind.get_params()) # fixes in-place
+
+        # Final scores
+        train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),
+                                                           X_train, y_train, X_test, y_test)
+        best_ind.set_train_score(train_accuracy)
+        best_ind.set_test_score(test_accuracy)
 
         self.logger.log_generation(generations, self.config.pop_size * (generations + 1), self.population, "EA")
-        self.logger.log_best(best_org, self.config, "EA")
+        self.logger.log_best(best_ind, self.config, "EA")
         self.logger.save(self.config, "EA")
 
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}")
+        
+        

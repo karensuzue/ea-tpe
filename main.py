@@ -1,31 +1,11 @@
 import argparse
 import numpy as np
-import os
-import pickle
 from config import Config
 from logger import Logger
 from ea import EA
 from bo import BO
 from tpec import TPEC
-from param_space import param_space_factory
-
-#https://github.com/automl/ASKL2.0_experiments/blob/84a9c0b3af8f7ac6e2a003d4dea5e6dce97d4315/experiment_scripts/utils.py
-def load_task(task_id: int, data_dir: str, preprocess=True):
-    """ 
-    Loads and splits the chosen task. 
-    Project must include 'data' directory, which stores a set of 
-    preprocessed and cached OpenML tasks. 
-    """
-    cached_data_path = f"{data_dir}/{task_id}_{preprocess}.pkl"
-    if os.path.exists(cached_data_path):
-        d = pickle.load(open(cached_data_path, "rb"))
-        X_train, y_train, X_test, y_test = d['X_train'], d['y_train'], d['X_test'], d['y_test']
-    else:
-        print(f'Task {task_id} not found')
-        exit(0)
-
-    return X_train, y_train, X_test, y_test
-
+from utils import load_task, param_space_factory
 
 def main():
     parser = argparse.ArgumentParser()
@@ -85,7 +65,7 @@ def main():
     else:
         raise ValueError(f"Unsupported method: {args.method}")
 
-    solver.run(X_train, y_train)
+    solver.run(X_train, y_train, X_test, y_test)
 
 if __name__ == "__main__":
     main()

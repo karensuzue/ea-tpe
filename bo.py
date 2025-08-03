@@ -2,11 +2,12 @@ import numpy as np
 from config import Config
 from logger import Logger
 from param_space import ModelParams
-from organism import Organism
+from individual import Individual
 from surrogate import Surrogate
 from tpe import TPE
 from typeguard import typechecked
 from typing import Tuple, Dict, List, Literal
+from utils import eval_factory, eval_final_factory
 
 @typechecked
 class BO:
@@ -40,26 +41,26 @@ class BO:
         if self.surrogate_type == "TPE":
             self.surrogate: Surrogate = TPE()
 
-        self.samples: List[Organism] = [] # This stores the observed samples
+        self.samples: List[Individual] = [] # This stores the observed samples
 
         # For debugging
         self.hard_eval_count = 0
         self.soft_eval_count = 0
     
-    def get_samples(self) -> List[Organism]:
+    def get_samples(self) -> List[Individual]:
         return self.samples
     
-    def set_samples(self, samples: List[Organism]):
+    def set_samples(self, samples: List[Individual]):
         self.samples = samples
 
-    def run(self, X_train, y_train):
+    def run(self, X_train, y_train, X_test, y_test):
         # Initialize observed sample set, its size is determined by the 'pop_size' parameter in the Config
-        self.samples = [Organism(self.param_space) for _ in range(self.config.pop_size)]
+        self.samples = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
         # Evaluate initial samples on the true objective function (cross-validation)
-        for org in self.samples:
+        for ind in self.samples:
             # Invert to minimize
-            org.set_fitness(-1 * self.param_space.eval_parameters(org.get_genotype(), X_train, y_train))
+            ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
             if self.config.debug: self.hard_eval_count += 1
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
@@ -73,35 +74,41 @@ class BO:
 
             # We randomly select enough candidates to keep the number of 'soft' evaluations consistent between BO and TPEC
             # We define 'soft' evaluations to be those performed on the surrogate
-            # candidates = [Organism(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
+            # candidates = [Individual(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space)
 
             # Select the top candidate(s) for evaluation on the true objective
-            best_org, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
-            assert(len(best_org) == self.num_top_cand)
+            best_ind, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
+            assert(len(best_ind) == self.num_top_cand)
             if self.config.debug: self.soft_eval_count += soft_eval_count
 
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
             # Evaluate the chosen candidates on the true objective
-            for org in best_org: # 'best_org' may contain more than 1 organism
-                org.set_fitness(-1 * self.param_space.eval_parameters(org.get_genotype(), X_train, y_train))
+            for ind in best_ind: # 'best_ind' may contain more than 1 Individual
+                ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
                 if self.config.debug: self.hard_eval_count += 1 
 
             # Update sample set
-            self.samples += best_org
+            self.samples += best_ind
 
         # For the final generation
-        self.samples.sort(key=lambda o: o.get_fitness())
-        best_org = self.samples[0]
-        self.param_space.fix_parameters(best_org.get_genotype())
+        self.samples.sort(key=lambda o: o.get_performance())
+        best_ind = self.samples[0]
+        self.param_space.fix_parameters(best_ind.get_params())
+
+        # Final scores
+        train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),
+                                                           X_train, y_train, X_test, y_test)
+        best_ind.set_train_score(train_accuracy)
+        best_ind.set_test_score(test_accuracy)
 
         # Log best, average, and median objective values in the final sample set
         self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand, 
                                    self.samples, f"{self.surrogate_type}BO")
         # Log the best observed hyperparameter configuration across all iterations
-        self.logger.log_best(best_org, self.config, f"{self.surrogate_type}BO")
+        self.logger.log_best(best_ind, self.config, f"{self.surrogate_type}BO")
         self.logger.save(self.config, f"{self.surrogate_type}BO")
 
         if self.config.debug:
