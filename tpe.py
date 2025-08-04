@@ -171,7 +171,7 @@ class TPE(Surrogate):
                     ]
             if info["type"] == "float":
                 params[name] = [
-                    np.clip(val, *info['bounds'])
+                    float(np.clip(val, *info['bounds']))
                     for val in params[name]
                 ]
 

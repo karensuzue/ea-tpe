@@ -5,7 +5,7 @@ import ray
 import numpy as np
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from param_space import RandomForestParams, ModelParams
 
 def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_test, y_test) -> Tuple[float, float]:
@@ -19,7 +19,6 @@ def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_t
 
     return train_accuracy, test_accuracy
 
-@ray.remote
 def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int) -> float:
     """ 
     Evaluates a given set of hyperparameters on cross-validated accuracy.
@@ -44,19 +43,36 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
 
 def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test) -> Tuple[float, float]:
     if model == 'RF':
+        print("Final evaluations for RF") # debug
         return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test)
     else:
         raise ValueError(f"Unsupported model: {model}")
     
+@ray.remote
+def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train, 
+                 seed: int, index: Optional[int] = None) -> Tuple[float, Optional[int]]:
+    """
+    Computes the performance score for the given set of hyperparameters under the specified model type.
+    
+    Parameters:
+        model (str): The name of the model to evaluate (e.g., 'RF').
+        model_params (Dict[str, Any]): The hyperparameters for the model.
+        X_train, y_train: The training data.
+        seed (int): Random seed for reproducibility.
+        index (Optional[int]): Index of the individual in the population (used for Ray-based parallel evaluation).
 
-def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train) -> float:
+    Returns:
+        Tuple[float, Optional[int]]: The performance score and (optionally) the individual's index.
+    """
     if model == 'RF':
-        return eval_parameters_RF(model_params, X_train, y_train)
+        print("Evaluation for RF.") # debug
+        return eval_parameters_RF(model_params, X_train, y_train, seed), index
     else:
         raise ValueError(f"Unsupported model: {model}")
 
 def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     if model == 'RF':
+        print("RF Parameter space chosen.") # debug
         return RandomForestParams(rng)
     # elif model == 'XGBoost': # TENTATIVE
     #     return XGBoostParams(seed)

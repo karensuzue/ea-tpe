@@ -27,10 +27,12 @@ def main():
                         help = "Directory to store logs and results.")
     parser.add_argument("--debug", type = bool, default = False,
                         help = "Enable debug mode for development; runs may take longer.")
-    parser.add_argument("--method", type = str, choices = ['EA', 'TPEBO', 'TPEC'], default='TPEC',
+    parser.add_argument("--method", type = str, choices = ['EA', 'TPEBO', 'TPEC'], default = 'TPEC',
                         help = "Hyperparameter tuning method to use.")
-    parser.add_argument("--model", type = str, choices = ['RF', 'XGB'], default='RF',
+    parser.add_argument("--model", type = str, choices = ['RF', 'XGB'], default = 'RF',
                         help = "Model to be used.")
+    parser.add_argument("--num_cpus", type = int, default = 1,
+                        help = "The number of CPU cores to use for multiprocessing")
     args = parser.parse_args()
 
     rng_ = np.random.default_rng(args.seed)
@@ -49,7 +51,8 @@ def main():
         model = args.model,
         method = args.method,
         debug = args.debug,
-        rng = rng_
+        rng = rng_,
+        num_cpus = args.num_cpus
     )
 
     logger = Logger(

@@ -1,5 +1,7 @@
 import numpy as np
 import copy
+import ray
+from ray import ObjectRef
 from config import Config
 from logger import Logger
 from typing import List
@@ -29,14 +31,38 @@ class TPEC:
         self.soft_eval_count = 0 # evaluations on the surrogate/expected improvement
     
     def run(self, X_train, y_train, X_test, y_test):
+         # Initialize Ray (multiprocessing)
+        if not ray.is_initialized():
+            ray.init(num_cpus = self.config.num_cpus, include_dashboard = True)
+
         # Initialize population with random organisms
         self.population = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
         # Evaluate EA population
-        for ind in self.population:
-            ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
+        # for ind in self.population:
+        #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
+        #     if self.config.debug: self.hard_eval_count += 1
+
+        # Create Ray ObjectRefs to efficiently share across multiple Ray tasks 
+        X_train_ref = ray.put(X_train)
+        y_train_ref = ray.put(y_train)
+
+        # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
+        ray_evals: List[ObjectRef] = [ 
+            eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+            for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
+        ]
+        # Process results as they come in
+        while len(ray_evals) > 0:
+            # ray.wait() returns a list of references to completed results & a list of remaining jobs. 
+            # We remove the finished jobs from ray_evals by updating it to be the list of remaining jobs
+            # Here we set 'num_returns' to 1, so it returns one finished reference at a time
+            done, ray_evals = ray.wait(ray_evals, num_returns = 1)
+            # Extract the only result (Tuple[float, int]) from the 'done' list
+            performance, index = ray.get(done)[0] 
+            self.population[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
-        
+
         # Append population to the archive of all evaluated individuals
         self.evaluated_individuals += self.population
 
@@ -68,7 +94,7 @@ class TPEC:
 
                 # Evaluate each candidate's expected improvement score, choose best
                 # There should be a single top candidate per parent
-                best_ind, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand=1) 
+                best_ind, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1) 
                 if self.config.debug: self.soft_eval_count += se_count
                 
                 # Evaluate best candidate(s) on the true objective.
@@ -83,7 +109,8 @@ class TPEC:
                 ei_all_parents += best_ei_scores.tolist() # this should be one score
                 
             self.population = new_pop
-            
+            self.evaluated_individuals += self.population
+
             assert(len(self.population) == self.config.pop_size)
 
             # Log per-iteration expected improvement statistics
@@ -108,4 +135,4 @@ class TPEC:
             print(f"Hard evaluations: {self.hard_eval_count}")
             print(f"Soft evaluations {self.soft_eval_count}")
 
-
+        ray.shutdown()

@@ -117,19 +117,19 @@ class ModelParams(ABC):
 
 # create a RandomForest subclass that inherits from ModelParams
 class RandomForestParams(ModelParams):
-    def __init__(self, rng: np.random.default_rng):
+    def __init__(self, rng: np.random.default_rng, offset: float = 1e-6):
         self.rng = rng
-
+        
         self.param_space =  {
             'n_estimators': {'bounds': (10, 1000), 'type': 'int'}, # int
             'criterion': {'bounds': ('gini', 'entropy', 'log_loss'), 'type': 'cat'}, # categorical
             'max_depth': {'bounds': (1, 30), 'type': 'int'}, # int
-            'min_samples_split': {'bounds': (.001, 1.0), 'type': 'float'}, # float
-            'min_samples_leaf': {'bounds': (.001, 1.0), 'type': 'float'}, # float
-            'max_features': {'bounds': (.001, 1.0), 'type': 'float'}, # float
+            'min_samples_split': {'bounds': (.001, 1.0 - offset), 'type': 'float'}, # float
+            'min_samples_leaf': {'bounds': (.001, 1.0 - offset), 'type': 'float'}, # float
+            'max_features': {'bounds': (.001, 1.0 - offset), 'type': 'float'}, # float
             'max_leaf_nodes': {'bounds': (2, 1000), 'type': 'int'}, # int
             'bootstrap': {'bounds': (True, False), 'type': 'bool'},  # boolean
-            'max_samples': {'bounds': (.001, 1.0), 'type': 'float'},  # float
+            'max_samples': {'bounds': (.001, 1.0 - offset), 'type': 'float'},  # float
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
     

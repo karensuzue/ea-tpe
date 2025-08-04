@@ -15,6 +15,7 @@ class Config:
     method: str
     debug: bool
     rng: np.random.default_rng
+    num_cpus: int
 
 # class Config:
 #     def __init__(self, 

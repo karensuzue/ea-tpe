@@ -1,4 +1,6 @@
 import numpy as np
+import ray
+from ray import ObjectRef
 from config import Config
 from logger import Logger
 from param_space import ModelParams
@@ -54,13 +56,34 @@ class BO:
         self.samples = samples
 
     def run(self, X_train, y_train, X_test, y_test):
+        # Initialize Ray
+        if not ray.is_initialized():
+            ray.init(num_cpus = self.config.num_cpus, include_dashboard = True)
+        
         # Initialize observed sample set, its size is determined by the 'pop_size' parameter in the Config
         self.samples = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
         # Evaluate initial samples on the true objective function (cross-validation)
-        for ind in self.samples:
-            # Invert to minimize
-            ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
+        # for ind in self.samples:
+        #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
+        #     if self.config.debug: self.hard_eval_count += 1
+
+        # Create Ray ObjectRefs to efficiently share across multiple Ray tasks 
+        X_train_ref = ray.put(X_train)
+        y_train_ref = ray.put(y_train)
+
+        # Evaluate initial samples with Ray
+        ray_evals: List[ObjectRef] = [ 
+            eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+            for i, ind in enumerate(self.samples) # each ObjectRef leads to a Tuple[float, int]
+        ]
+
+        # Process results as they come in
+        while len(ray_evals) > 0:
+            done, ray_evals = ray.wait(ray_evals, num_returns = 1)
+            # Extract the only result (Tuple[float, int]) from the 'done' list
+            performance, index = ray.get(done)[0] 
+            self.samples[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
@@ -86,9 +109,20 @@ class BO:
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
             # Evaluate the chosen candidates on the true objective
-            for ind in best_ind: # 'best_ind' may contain more than 1 Individual
-                ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
-                if self.config.debug: self.hard_eval_count += 1 
+            # for ind in best_ind: # 'best_ind' may contain more than 1 Individual
+            #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
+            #     if self.config.debug: self.hard_eval_count += 1 
+
+            ray_candidate_evals: List[ObjectRef] = [
+                eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+                for i, ind in enumerate(best_ind)
+            ]
+
+            while len(ray_candidate_evals) > 0:
+                done, ray_candidate_evals = ray.wait(ray_candidate_evals, num_returns = 1)
+                performance, index = ray.get(done)[0]
+                best_ind[index].set_performance(performance)
+                if self.config.debug: self.hard_eval_count += 1
 
             # Update sample set
             self.samples += best_ind
@@ -115,3 +149,5 @@ class BO:
             print(f"Hard evaluations: {self.hard_eval_count}")
             print(f"Soft evaluations {self.soft_eval_count}")
             assert(len(self.samples) == self.config.evaluations)
+
+        ray.shutdown()
