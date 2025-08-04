@@ -8,10 +8,11 @@ from sklearn.ensemble import RandomForestClassifier
 from typing import Dict, Any, Tuple, Optional
 from param_space import RandomForestParams, ModelParams
 
-def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_test, y_test) -> Tuple[float, float]:
+def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     model_params_copy = copy.deepcopy(model_params)
     RandomForestParams.fix_parameters(model_params_copy)
-    model = RandomForestClassifier(**model_params_copy, random_state=0)
+
+    model = RandomForestClassifier(**model_params_copy, random_state = seed)
     model.fit(X_train, y_train)
 
     train_accuracy = model.score(X_train, y_train)
@@ -41,10 +42,10 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
     return -1 * score # minimize
 
 
-def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test) -> Tuple[float, float]:
+def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     if model == 'RF':
         print("Final evaluations for RF") # debug
-        return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test)
+        return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
     else:
         raise ValueError(f"Unsupported model: {model}")
     

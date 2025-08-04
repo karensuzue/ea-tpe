@@ -155,7 +155,7 @@ class EA:
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),
-                                                           X_train, y_train, X_test, y_test)
+                                                           X_train, y_train, X_test, y_test, self.config.seed)
         best_ind.set_train_score(train_accuracy)
         best_ind.set_test_score(test_accuracy)
 

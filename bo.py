@@ -56,6 +56,13 @@ class BO:
         self.samples = samples
 
     def run(self, X_train, y_train, X_test, y_test):
+        """ 
+        Run BO with parallelized fitness evaluations using Ray. 
+
+        Parameters:
+            X_train, y_train: The training data.
+            X_test, y_test: The testing data.
+        """
         # Initialize Ray
         if not ray.is_initialized():
             ray.init(num_cpus = self.config.num_cpus, include_dashboard = True)
@@ -98,6 +105,8 @@ class BO:
             # We randomly select enough candidates to keep the number of 'soft' evaluations consistent between BO and TPEC
             # We define 'soft' evaluations to be those performed on the surrogate
             # candidates = [Individual(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
+
+            # Sample candidates from the surrogate
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space)
 
             # Select the top candidate(s) for evaluation on the true objective
@@ -134,7 +143,7 @@ class BO:
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),
-                                                           X_train, y_train, X_test, y_test)
+                                                           X_train, y_train, X_test, y_test, self.config.seed)
         best_ind.set_train_score(train_accuracy)
         best_ind.set_test_score(test_accuracy)
 
