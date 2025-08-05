@@ -32,7 +32,7 @@ class Logger:
             if isinstance(val, (bool, np.bool_)):
                 best_params[name] = str(val)
 
-        self.best_org_data = {
+        self.best_ind_data = {
             "dataset": config.task_id,
             "replicate": config.seed,
             "evaluations": config.evaluations,
@@ -52,17 +52,17 @@ class Logger:
     def save(self, config: Config, method: str) -> None:
         dataset = config.task_id
         seed = config.seed
-        os.makedirs(f"{self.logdir}_dataset{dataset}", exist_ok=True)
-        with open(f"{self.logdir}_dataset{dataset}/log_{method}_{seed}.csv", "w") as f:
+        os.makedirs(f"{self.logdir}/{dataset}", exist_ok=True)
+        with open(f"{self.logdir}/{dataset}/log_{method}_{seed}.csv", "w") as f:
             f.write("generation,evaluation,best,average,median,std\n")
             for gen, eval, best, avg, median, std in self.history:
                 f.write(f"{gen},{eval},{best},{avg},{median},{std}\n")
 
-        with open(f"{self.logdir}_dataset{dataset}/result_{method}_{seed}.json", "w") as f:
-            json.dump(self.best_org_data, f, indent=2)
+        with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.json", "w") as f:
+            json.dump(self.best_ind_data, f, indent=2)
 
         if self.ei_history:
-            with open(f"{self.logdir}_dataset{dataset}/ei_{method}_{seed}.csv", "w") as f:
+            with open(f"{self.logdir}/{dataset}/ei_{method}_{seed}.csv", "w") as f:
                 f.write("generation,evaluation,average,max,std\n")
                 for gen, eval, avg_ei, max_ei, std_ei in self.ei_history:
                     f.write(f"{gen},{eval},{avg_ei},{max_ei},{std_ei}\n")

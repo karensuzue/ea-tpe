@@ -2,7 +2,6 @@
 File to generate SLURM script
 """
 # clear; python sb_maker.py > runner.sb
-# must make first elif -> if
 
 import pandas as pd
 
@@ -27,8 +26,8 @@ def print_header(array_max, nodes = 1, ntasks = 1, cpus = 12):
 
     print("# todo: define the output and data directory")
     print('DATA_DIR=/common/suzuek/ea-tpe/data/')
-    print("RESULTS_DIR=/common/suzuek/ea-tpe/results/")
-    print("mkdir -p ${RESULTS_DIR}\n")
+    print("RESULTS_DIR=/common/suzuek/ea-tpe/results")
+    # print("mkdir -p ${RESULTS_DIR}\n")
 
 if __name__ == "__main__":
     # Retrieve names of the hardest OpenML tasks (less than 80% accuracy on test set)
@@ -60,7 +59,8 @@ if __name__ == "__main__":
     print(" ".join(str(id) for id in task_ids), end="")  
     print(")\n")
 
-    print("ID=$SLURM_ARRAY_TASK_ID")
+    # slurm array starts at 1, bash array starts at 0
+    print("ID=$((SLURM_ARRAY_TASK_ID - 1))")
 
     print(f"METHOD_ID=$((ID / (15 * {task_num})))")
     print(f"DATASET_ID=$(( (ID % (15 * {task_num})) / 15 ))")
@@ -71,12 +71,15 @@ if __name__ == "__main__":
 
     print("echo \"Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}\"\n")
 
+    # print("OUTPUT_DIR=${RESULTS_DIR}/${METHOD}_${DATASET}_${REPLICATE}")
+
     print("python main.py \\ ")
     print("    --method ${METHOD} \\ ")
     print("    --task_id ${DATASET} \\ ")
     print("    --seed ${REPLICATE} \\ ")
     print(f"    --evaluations {evals} \\ ")
-    print(f"    --num_cpus {num_cpus}")
+    print(f"    --num_cpus {num_cpus} \\")
+    print("    --logdir ${RESULTS_DIR}")
 
 
 

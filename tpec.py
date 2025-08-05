@@ -129,8 +129,8 @@ class TPEC:
             self.evaluated_individuals += self.population
 
             assert(len(self.population) == self.config.pop_size)
-            assert(len(self.evaluated_individuals) == self.config.pop_size * (gen + 1))
-            print("ARCHIVE LENGTH: ", len(self.evaluated_individuals))
+            assert(len(self.evaluated_individuals) == self.config.pop_size * (gen + 2))
+            # print("ARCHIVE LENGTH: ", len(self.evaluated_individuals))
 
             # Log per-iteration expected improvement statistics
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)

@@ -41,5 +41,5 @@
 *.dwo
 
 data/
-results_dataset359959/
+results/
 __pycache__
