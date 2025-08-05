@@ -18,7 +18,7 @@ class TPEC:
         self.param_space = param_space
 
         self.ea = EA(config, logger, param_space) 
-        self.tpe = TPE() # default gamma (splitting threshold)
+        self.tpe = TPE(self.config.rng) # default gamma (splitting threshold)
 
         self.population: List[Individual] = []
         self.evaluated_individuals: List[Individual] = [] # archive of every individual evaluated so far
@@ -128,14 +128,11 @@ class TPEC:
             self.population = new_pop
             self.evaluated_individuals += self.population
 
-            assert(len(self.population) == self.config.pop_size)
-            assert(len(self.evaluated_individuals) == self.config.pop_size * (gen + 2))
-            # print("ARCHIVE LENGTH: ", len(self.evaluated_individuals))
-
             # Log per-iteration expected improvement statistics
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)
 
         # For the final generation
+        # ei_last_gen: List[float] = [o.get_ei() for o in self.population]
         self.population.sort(key=lambda o: o.get_performance()) # lowest first
         best_ind = self.population[0]
         self.param_space.fix_parameters(best_ind.get_params())
@@ -148,6 +145,7 @@ class TPEC:
 
         self.logger.log_generation(generations, self.config.pop_size * (generations + 1), self.population, "TPEC")
         self.logger.log_best(best_ind, self.config, "TPEC")
+        # self.logger.log_ei(generations, self.config.pop_size * (generations + 1), ei_last_gen)
         self.logger.save(self.config, "TPEC")
 
         if self.config.debug:

@@ -14,7 +14,7 @@ class MultivariateKDE:
     This wrapper over 'scipy.stats.gaussian_kde' supports optional bandwidth scaling
     and enforces a minimum density 'eps' to avoid zero likelihood values.
     """
-    def __init__(self, data: np.ndarray, bw_factor: float=1.0, eps: float=1e-12):
+    def __init__(self, data: np.ndarray, rng: np.random.default_rng, bw_factor: float=1.0, eps: float=1e-12):
         """
         Parameters:
         - data : ndarray, shape=(d,n)
@@ -28,6 +28,8 @@ class MultivariateKDE:
         - eps : float
             Minimum floor value for the estimated density. Returned densities will be at least this value.
         """
+        self.rng = rng
+
         # If there is only 1 sample (n=1), KDE will fail
         if data.shape[1] == 1:
             data = np.hstack([data, data + 1e-3]) # duplicate it slightly
@@ -35,12 +37,14 @@ class MultivariateKDE:
         # Check if covariance matrix is singular: must have >1 distinct samples
         if np.linalg.matrix_rank(np.cov(data)) < data.shape[0]:
             # Add small noise to escape colinearity
-            data = data + np.random.normal(scale=1e-3, size=data.shape) 
+            data = data + self.rng.normal(scale=1e-3, size=data.shape) 
 
         self.kde = gaussian_kde(data, bw_method='silverman')
         self.kde.set_bandwidth(self.kde.factor * bw_factor)
         self.eps = eps
 
+    def __repr__(self):
+        return f"MultivariateKDE(dims={self.kde.d}, samples={self.kde.n})"
 
     def pdf(self, vec: Union[np.ndarray, List]):
         """
@@ -62,7 +66,9 @@ class MultivariateKDE:
         Sample n new points from the estimated distribution. 
         Returns a matrix of shape (dimensions, n_samples)
         """
-        return self.kde.resample(size=n_samples) # shape (dimensions, n_samples)
+        # For reproducibility, pull an int seed from the generator
+        int_seed = self.rng.integers(0, 2**32 - 1)
+        return self.kde.resample(size=n_samples, seed=int_seed) # shape (dimensions, n_samples)
 
 class CategoricalPMF:
     """ 
@@ -72,7 +78,7 @@ class CategoricalPMF:
     """
 
     def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str] | Tuple[bool], 
-                 alpha = 1.0):
+                 rng: np.random.default_rng, alpha = 1.0):
         """
         Parameters:
         - values: Iterable[str]
@@ -82,6 +88,8 @@ class CategoricalPMF:
         - alpha: float
             Laplace smoothing parameter. Higher values increase the uniformity of the distribution.
         """
+        self.rng = rng
+
         self.all_categories = all_categories
 
         # Count the frequency of each category in 'values'
@@ -113,7 +121,7 @@ class CategoricalPMF:
             otherwise a single sampled value.
         """
         probabilities = list(self.prob.values())
-        samples = np.random.choice(self.all_categories, size=n_samples, p=probabilities)
+        samples = self.rng.choice(self.all_categories, size=n_samples, p=probabilities)
         return samples.tolist()
 
 class TPE(Surrogate):
@@ -123,11 +131,13 @@ class TPE(Surrogate):
     and uses kernel density estimation (KDE) and probability mass functions (PMFs) 
     to model the likelihood of good and bad configurations.
     """
-    def __init__(self, gamma: float = 0.2):
+    def __init__(self, rng: np.random.default_rng, gamma: float = 0.2):
         """
         Parameters:
             gamma (float): Fraction of samples considered "good".
         """
+        self.rng = rng
+
         self.gamma = gamma # splitting parameter
 
         # Fitted distributions
@@ -152,7 +162,7 @@ class TPE(Surrogate):
         # params: Dict[str, Any] = {} # shape (dimensions, n_samples)
 
         # Sample from the good numeric distribution 
-        multi_samples = self.multi_g.sample(num_samples) # shape (dimensions, n_samples)
+        multi_samples = self.multi_l.sample(num_samples) # shape (dimensions, n_samples)
         assert(multi_samples.shape[0] == len(numeric_params_names))
         assert(multi_samples.shape[1] == num_samples)
 
@@ -238,8 +248,8 @@ class TPE(Surrogate):
                             for param_name in numeric_params])
         
         # Fit Multivariate KDEs
-        self.multi_l = MultivariateKDE(good_num_samples)
-        self.multi_g = MultivariateKDE(bad_num_samples)
+        self.multi_l = MultivariateKDE(good_num_samples, self.rng)
+        self.multi_g = MultivariateKDE(bad_num_samples, self.rng)
 
         # Fit independent PMFs
         self.cat_l.clear() 
@@ -250,7 +260,8 @@ class TPE(Surrogate):
             param_name: CategoricalPMF(
                 # Extract categorical values from samples in (d, n) format
                 values = [o.get_params()[param_name] for o in good_samples],
-                all_categories = info["bounds"]
+                all_categories = info["bounds"],
+                rng = self.rng
             )
             for param_name, info in categorical_params.items()
         }
@@ -258,7 +269,8 @@ class TPE(Surrogate):
         self.cat_g = {
             param_name : CategoricalPMF(
                 values = [o.get_params()[param_name] for o in bad_samples],
-                all_categories = info["bounds"]
+                all_categories = info["bounds"],
+                rng = self.rng
             )
             for param_name, info in categorical_params.items()
         }

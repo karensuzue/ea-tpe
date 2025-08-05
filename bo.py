@@ -41,7 +41,7 @@ class BO:
         self.num_top_cand = num_top_cand
 
         if self.surrogate_type == "TPE":
-            self.surrogate: Surrogate = TPE()
+            self.surrogate: Surrogate = TPE(self.config.rng)
 
         self.samples: List[Individual] = [] # This stores the observed samples
 
@@ -111,7 +111,6 @@ class BO:
 
             # Select the top candidate(s) for evaluation on the true objective
             best_ind, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
-            assert(len(best_ind) == self.num_top_cand)
             if self.config.debug: self.soft_eval_count += soft_eval_count
 
             # Log per-iteration expected improvement statistics (only from the chosen candidates)

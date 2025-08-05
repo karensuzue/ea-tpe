@@ -1,7 +1,10 @@
 import os
 import pickle
 import numpy as np
+from individual import Individual
 from param_space import ModelParams, RandomForestParams
+from tpe import MultivariateKDE, CategoricalPMF, TPE
+from utils import eval_parameters_RF, load_task
 
 # # config = Config(dataset_idx=0)
 # # ea_solver = EA(config)
@@ -67,11 +70,49 @@ from param_space import ModelParams, RandomForestParams
 # print(X_train)
 # print(y_train)
 
-rng_ = np.random.default_rng(0)
-test_rf = RandomForestParams(rng_)
-params = test_rf.generate_random_parameters()
-print(params)
-test_rf.mutate_parameters(params)
-print(params)
+# rng_ = np.random.default_rng(0)
+# test_rf = RandomForestParams(rng_)
+# params = test_rf.generate_random_parameters()
+# print(params)
+# test_rf.mutate_parameters(params)
+# print(params)
 
-print(test_rf.get_params_by_type("cat"))
+# print(test_rf.get_params_by_type("cat"))
+
+
+rng_ = np.random.default_rng(0)
+# # Multivariate, 2D (2 parameters, 3 samples)
+multi = MultivariateKDE(np.array([[1, 2, 3], [4, 5, 6]]), rng_)  # shape (2, 3)
+print(multi.sample())
+print(multi.pdf([[2.5, 3.5],[5.5, 6.5]]))
+
+cat = CategoricalPMF(['cat', 'dog', 'cat', 'cat'], ('cat', 'dog'), rng_)
+print(cat.sample())
+print(cat.pmf('dog'))
+
+test_rf = RandomForestParams(rng_)
+# params = test_rf.generate_random_parameters()
+# print("OG: ", params)
+# test_rf.mutate_parameters(params)
+# print("Mutated: ", params)
+
+
+X_train, y_train, X_test, y_test = load_task(task_id = 359959, data_dir = "data")
+
+tpe = TPE(rng = rng_)
+population = [Individual(test_rf.generate_random_parameters()) for _ in range(50)]
+# print("Population: ", population)
+for ind in population:
+    ind.set_performance(eval_parameters_RF(ind.get_params(), X_train, y_train, seed = rng_.integers(0, 2**32 - 1)))
+tpe.fit(population, test_rf)
+
+samples = tpe.sample(2, test_rf)
+for ind in samples:
+    ind.set_performance(eval_parameters_RF(ind.get_params(), X_train, y_train, seed = rng_.integers(0, 2**32 - 1)))
+print(samples)
+
+print("EXPECTED IMPROVEMENT")
+print(tpe.expected_improvement(test_rf, samples))
+
+print("SUGGEST")
+print(tpe.suggest(test_rf, samples))
