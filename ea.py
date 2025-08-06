@@ -73,7 +73,7 @@ class EA:
             # Select a single parent using tournament selection
             parent = self.tournament_selection(population, performances)
 
-            # In-place mutation, deep copy required 
+            # In-place mutation with fixing, deep copy required 
             child = copy.deepcopy(parent)
             self.param_space.mutate_parameters(child.get_params(), self.config.mut_rate)
 
@@ -97,10 +97,9 @@ class EA:
         # Initialize population with random individuals
         self.population = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
-        # Evaluate population without Ray
-        # for ind in self.population:
-        #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train, self.config.seed))
-        #     if self.config.debug: self.hard_eval_count += 1
+        # Make sure parameters align with scikit-learn's requirements
+        for ind in self.population:
+            self.param_space.fix_parameters(ind.get_params()) # fixes in-place 
 
         # Create Ray ObjectRefs to efficiently share across multiple Ray tasks 
         X_train_ref = ray.put(X_train)
@@ -130,17 +129,11 @@ class EA:
             # Produce offspring (parents may be carried over unchanged, we consider them to be new offspring regardless)
             self.population = self.make_offspring(self.population, self.config.pop_size)
             
-            # Evaluate offspring without Ray
-            # for ind in self.population:
-            #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train, self.config.seed))
-            #     if self.config.debug: self.hard_eval_count += 1
-
             # Evaluate offspring with Ray
             ray_child_evals: List[ObjectRef] = [ 
                 eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
                 for i, ind in enumerate(self.population)
             ]
-
             while len(ray_child_evals) > 0:
                 # ray_child_evals shrinks as it gets updated
                 done, ray_child_evals = ray.wait(ray_child_evals, num_returns = 1)
@@ -148,10 +141,11 @@ class EA:
                 self.population[index].set_performance(performance)
                 if self.config.debug: self.hard_eval_count += 1
 
-        # For the final generation
+        # Get all individuals tied for best performance, randomly select one of the tied best individuals
         self.population.sort(key=lambda o: o.get_performance()) # ascending order
-        best_ind = self.population[0]
-        self.param_space.fix_parameters(best_ind.get_params()) # fixes in-place
+        best_performance = self.population[0].get_performance()
+        best_inds = [ind for ind in self.population if ind.get_performance() == best_performance]
+        best_ind = self.config.rng.choice(best_inds)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),

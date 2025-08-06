@@ -109,7 +109,7 @@ tpe.fit(population, test_rf)
 samples = tpe.sample(2, test_rf)
 for ind in samples:
     ind.set_performance(eval_parameters_RF(ind.get_params(), X_train, y_train, seed = rng_.integers(0, 2**32 - 1)))
-print(samples)
+print([ind.get_performance() for ind in samples])
 
 print("EXPECTED IMPROVEMENT")
 print(tpe.expected_improvement(test_rf, samples))

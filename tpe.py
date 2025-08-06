@@ -158,6 +158,7 @@ class TPE(Surrogate):
         }
 
         numeric_params_names = list(numeric_params.keys())
+        # print("NUMERIC PARAMETER NAMES (SAMPLE): ", numeric_params_names)
 
         # params: Dict[str, Any] = {} # shape (dimensions, n_samples)
 
@@ -238,6 +239,9 @@ class TPE(Surrogate):
             **param_space.get_params_by_type('cat'),
             **param_space.get_params_by_type('bool')
         }
+
+        # numeric_params_names = list(numeric_params.keys())
+        # print("NUMERIC PARAMETER NAMES (FIT): ", numeric_params_names)
 
         # For each sample set, extract values of numeric hyperparameters
         # Format shape (n_params, n_samples): [[value11, value12,...], [value21, value22, ...], ...]

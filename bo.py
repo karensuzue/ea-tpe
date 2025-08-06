@@ -70,10 +70,9 @@ class BO:
         # Initialize observed sample set, its size is determined by the 'pop_size' parameter in the Config
         self.samples = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
-        # Evaluate initial samples on the true objective function (cross-validation)
-        # for ind in self.samples:
-        #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
-        #     if self.config.debug: self.hard_eval_count += 1
+        # Make sure parameters align with scikit-learn's requirements before CV evaluations
+        for ind in self.samples:
+            self.param_space.fix_parameters(ind.get_params()) # fixes in-place 
 
         # Create Ray ObjectRefs to efficiently share across multiple Ray tasks 
         X_train_ref = ray.put(X_train)
@@ -84,7 +83,6 @@ class BO:
             eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
             for i, ind in enumerate(self.samples) # each ObjectRef leads to a Tuple[float, int]
         ]
-
         # Process results as they come in
         while len(ray_evals) > 0:
             done, ray_evals = ray.wait(ray_evals, num_returns = 1)
@@ -93,20 +91,32 @@ class BO:
             self.samples[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
+
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
             # Log best, average, and median objective values in the current sample set
             self.logger.log_generation(gen, self.config.pop_size + gen * self.num_top_cand, 
                                        self.samples, f"{self.surrogate_type}BO")
 
+            # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
+            # NOTE: parameters will need to be fixed again later
+            for ind in self.samples:
+                params = ind.get_params()
+                for name in params:
+                    if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
+                        params[name] = .0001
+                ind.set_params(params)
+
             # Fit the surrogate to the observed data
             self.surrogate.fit(self.samples, self.param_space)
 
-            # We randomly select enough candidates to keep the number of 'soft' evaluations consistent between BO and TPEC
-            # We define 'soft' evaluations to be those performed on the surrogate
-            # candidates = [Individual(self.param_space) for _ in range(self.config.num_candidates * self.num_top_cand)]
+            # Make sure all samples are fixed again
+            for ind in self.samples:
+                self.param_space.fix_parameters(ind.get_params())
 
-            # Sample candidates from the surrogate
+            # Sample enough candidates from the surrogate to keep the number of 'soft' evaluations consistent between BO and TPEC
+            # We define 'soft' evaluations to be those performed on the surrogate
+            # NOTE: these candidates should still need fixing
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space)
 
             # Select the top candidate(s) for evaluation on the true objective
@@ -116,16 +126,15 @@ class BO:
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
-            # Evaluate the chosen candidates on the true objective
-            # for ind in best_ind: # 'best_ind' may contain more than 1 Individual
-            #     ind.set_performance(eval_factory(self.config.model, ind.get_params(), X_train, y_train))
-            #     if self.config.debug: self.hard_eval_count += 1 
+            # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
+            for ind in best_ind: # 'best_ind' may contain more than 1 Individual
+                self.param_space.fix_parameters(ind.get_params()) # fixes in-place
 
+            # Evaluate the chosen candidate(s)
             ray_candidate_evals: List[ObjectRef] = [
                 eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
                 for i, ind in enumerate(best_ind)
             ]
-
             while len(ray_candidate_evals) > 0:
                 done, ray_candidate_evals = ray.wait(ray_candidate_evals, num_returns = 1)
                 performance, index = ray.get(done)[0]
@@ -135,10 +144,11 @@ class BO:
             # Update sample set
             self.samples += best_ind
 
-        # For the final generation
+        # Get all individuals tied for best performance, randomly select one of the tied best individuals
         self.samples.sort(key=lambda o: o.get_performance())
-        best_ind = self.samples[0]
-        self.param_space.fix_parameters(best_ind.get_params())
+        best_performance = self.samples[0].get_performance()
+        best_inds = [ind for ind in self.samples if ind.get_performance() == best_performance]
+        best_ind = self.config.rng.choice(best_inds)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),

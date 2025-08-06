@@ -148,18 +148,15 @@ class RandomForestParams(ModelParams):
                 if spec["type"] == "int":
                     model_params[name] = self.shift_int_parameter(int(model_params[name]), spec['bounds'][0], spec['bounds'][1])
                 elif spec["type"] == "float":
-                    # If "max_samples" is None from "bootstrap" == False, randomly pick a number for "max_samples"
-                    # UPDATE: we handle this in evaluation, and fixes parameters at the end. 
-                    # This means that if "bootstrap" == False, "max_samples" is effectively an intron, we disregard its values.
-                    # if name == "max_samples" and model_params[name] is None:
-                    #     model_params[name] = float(self.rng.uniform(*spec['bounds']))
-                    # else:
+                    if name == "max_samples" and model_params[name] is None:
+                        continue
+                    else:
                         model_params[name] = self.shift_float_parameter(float(model_params[name]), spec['bounds'][0], spec['bounds'][1])
                 elif spec["type"] in ["cat", "bool"]:
                     model_params[name] = self.pick_categorical_parameter(spec['bounds'])
 
         # Fix the parameters to ensure they are valid
-        # self.fix_parameters(model_params)
+        self.fix_parameters(model_params)
     
     
     def generate_random_parameters(self) -> Dict[str, Any]:
@@ -199,13 +196,14 @@ class RandomForestParams(ModelParams):
         return {name: info for name, info in self.param_space.items() 
                 if info['type'] == type}
 
-    @staticmethod
-    def fix_parameters(model_params: Dict[str, Any]) -> None:
+    # @staticmethod
+    def fix_parameters(self, model_params: Dict[str, Any]) -> None:
         """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
         # if bootstrap is False, we need to set max_samples to None
         if not model_params['bootstrap']:
             model_params['max_samples'] = None
-
+        if model_params['bootstrap'] and model_params['max_samples'] is None:
+            model_params['max_samples'] = float(self.rng.uniform(*self.param_space['max_samples']['bounds']))
         return
     
 

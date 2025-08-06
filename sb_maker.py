@@ -39,7 +39,7 @@ if __name__ == "__main__":
     # For a total of 45*task_num jobs
     task_num = len(task_ids)
     evals = 1000
-    replicates = 15
+    replicates = 20
     methods = ['EA', 'TPEBO', 'TPEC']
     total_jobs = replicates * len(methods) * task_num
 
@@ -62,9 +62,9 @@ if __name__ == "__main__":
     # slurm array starts at 1, bash array starts at 0
     print("ID=$((SLURM_ARRAY_TASK_ID - 1))")
 
-    print(f"METHOD_ID=$((ID / (15 * {task_num})))")
-    print(f"DATASET_ID=$(( (ID % (15 * {task_num})) / 15 ))")
-    print(f"REPLICATE=$((ID % 15))\n")
+    print(f"METHOD_ID=$((ID / ({replicates} * {task_num})))")
+    print(f"DATASET_ID=$(( (ID % ({replicates} * {task_num})) / {replicates} ))")
+    print(f"REPLICATE=$((ID % {replicates}))\n")
 
     print("DATASET=${DATASETS[$DATASET_ID]}")
     print("METHOD=${METHODS[$METHOD_ID]} \n")
@@ -79,6 +79,7 @@ if __name__ == "__main__":
     print("    --seed ${REPLICATE} \\ ")
     print(f"    --evaluations {evals} \\ ")
     print(f"    --num_cpus {num_cpus} \\")
+    print("    --debug True \\")
     print("    --logdir ${RESULTS_DIR}")
 
 

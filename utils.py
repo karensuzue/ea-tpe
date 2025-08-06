@@ -9,10 +9,7 @@ from typing import Dict, Any, Tuple, Optional
 from param_space import RandomForestParams, ModelParams
 
 def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
-    model_params_copy = copy.deepcopy(model_params)
-    RandomForestParams.fix_parameters(model_params_copy)
-
-    model = RandomForestClassifier(**model_params_copy, random_state = seed)
+    model = RandomForestClassifier(**model_params, random_state = seed)
     model.fit(X_train, y_train)
 
     train_accuracy = model.score(X_train, y_train)
@@ -27,16 +24,11 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
     Parameters:
         model_params (Dict[str, Any]): The set of hyperparameters to evaluate.
     """
-    # "fix_parameters()" changes "model_params" in-place, so a copy must be made
-    # We also must retain the original "model_params" for TPE's fit()
-    model_params_copy = copy.deepcopy(model_params)
-    RandomForestParams.fix_parameters(model_params_copy)
-
     # Must use the same seed/random_state across parameters and methods, 
     # to maintain the same CV splits 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed) # initialize our cv splitter
     # Both model internals and data splits are reproducible
-    model = RandomForestClassifier(**model_params_copy, random_state=seed)
+    model = RandomForestClassifier(**model_params, random_state=seed)
     
     score = cross_val_score(model, X_train, y_train, cv=cv, scoring='accuracy').mean() 
     return -1 * score # minimize
@@ -44,7 +36,7 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
 
 def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     if model == 'RF':
-        print("Final evaluations for RF") # debug
+        # print("Final evaluations for RF") # debug
         return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
     else:
         raise ValueError(f"Unsupported model: {model}")
@@ -66,14 +58,14 @@ def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
         Tuple[float, Optional[int]]: The performance score and (optionally) the individual's index.
     """
     if model == 'RF':
-        print("Evaluation for RF.") # debug
+        # print("Evaluation for RF.") # debug
         return eval_parameters_RF(model_params, X_train, y_train, seed), index
     else:
         raise ValueError(f"Unsupported model: {model}")
 
 def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     if model == 'RF':
-        print("RF Parameter space chosen.") # debug
+        # print("RF Parameter space chosen.") # debug
         return RandomForestParams(rng)
     # elif model == 'XGBoost': # TENTATIVE
     #     return XGBoostParams(seed)
