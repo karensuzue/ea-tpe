@@ -116,14 +116,14 @@ class BO:
                 for name in params:
                     if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
                         params[name] = .0001
-                ind.set_params(params)
+                # ind.set_params(params) # TODO: technically not needed? Since ind.get_params() returns by reference
 
             # Fit the surrogate to the observed data
             self.surrogate.fit(self.samples, self.param_space)
 
             # Make sure all samples are fixed again
             for ind in self.samples:
-                self.param_space.fix_parameters(ind.get_params())
+                self.param_space.fix_parameters(ind.get_params()) # this works because references, can confirm by printing
 
             # Sample enough candidates from the surrogate to keep the number of 'soft' evaluations consistent between BO and TPEC
             # We define 'soft' evaluations to be those performed on the surrogate

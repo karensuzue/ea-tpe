@@ -74,7 +74,7 @@ class TPEC:
         print(f"Initial population size: {len(self.population)}")
         print(f"Best training performance so far: {self.best_performance}")
 
-        # Append the population to the archive of all evaluated individuals
+        # Append the filtered population to the archive of all evaluated individuals
         self.evaluated_individuals += self.population
         assert(len(self.evaluated_individuals) == len(self.population))
 
@@ -89,14 +89,14 @@ class TPEC:
                 for name in params:
                     if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
                         params[name] = .0001
-                ind.set_params(params)
+                # ind.set_params(params)
 
             # Fit TPE to the archive of all observed individuals 
             self.tpe.fit(self.evaluated_individuals, self.param_space)
 
             # Fix the archive again to align with scikit-learn requirements
             for ind in self.evaluated_individuals:
-                self.param_space.fix_parameters(ind.get_params())
+                self.param_space.fix_parameters(ind.get_params()) # this works because references, can confirm by printing
 
             # To store the next population
             new_pop = []
@@ -110,20 +110,19 @@ class TPEC:
             parents = [self.ea.tournament_selection(self.population, performances) for _ in range(self.config.pop_size)]
             assert(len(parents) == self.config.pop_size)
 
+            # Each parent produces 'num_candidates' candidate offsprings (10 by default)
             for parent in parents:
-                # Each parent produces 'num_candidates' candidate offsprings (10 by default)
-                candidates = [Individual(copy.deepcopy(parent.get_params())) for _ in range(self.config.num_candidates)]
-                for child in candidates:
+                # Deep copy parent parameters separately, then safely plug into a new Individual object
+                candidate_params = [copy.deepcopy(parent.get_params()) for _ in range(self.config.num_candidates)]
+                for child_param in candidate_params:
                     # Mutations occur in place, should also include fixing
-                    self.param_space.mutate_parameters(child.get_params(), self.config.mut_rate)
-
-                # Can't use TPE's suggest() on candidates if numeric parameters have value "None" (e.g. max_samples)
-                for ind in candidates:
-                    params = ind.get_params()
-                    for name in params:
-                        if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
-                            params[name] = .0001
-                    ind.set_params(params)
+                    self.param_space.mutate_parameters(child_param, self.config.mut_rate)
+                    # Can't use TPE's suggest() on candidates if numeric parameters have value "None" (e.g. max_samples)
+                    for name in child_param:
+                        if self.param_space.param_space[name]['type'] in ['int', 'float'] and child_param[name] is None:
+                            child_param[name] = .0001
+                
+                candidates = [Individual(param) for param in candidate_params]
 
                 # Evaluate each candidate's expected improvement score, suggest one
                 best_candidate, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1) 
@@ -134,7 +133,6 @@ class TPEC:
                 for ind in best_candidate: # 'best_candidate' should contain a single Individual
                     self.param_space.fix_parameters(ind.get_params()) # fixes in-place
                 
-
                 # Evaluate best candidate(s) on the true objective.
                 # The system allows 'best_candidate' to contain more than one Individual (num_top_cand >= 1),
                 # but in TPEC, this is always set to 1. 
