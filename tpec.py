@@ -67,16 +67,16 @@ class TPEC:
             self.population[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
-        # Append the population to the archive of all evaluated individuals
-        self.evaluated_individuals += self.population
-        assert(len(self.evaluated_individuals) == len(self.population))
-
         # Remove individuals with positive performance
         self.remove_failed_individuals()
         # Update best performance and set of best performers
         self.process_population_for_best()
         print(f"Initial population size: {len(self.population)}")
         print(f"Best training performance so far: {self.best_performance}")
+
+        # Append the population to the archive of all evaluated individuals
+        self.evaluated_individuals += self.population
+        assert(len(self.evaluated_individuals) == len(self.population))
 
         generations = (self.config.evaluations // self.config.pop_size) - 1
         for gen in range(generations):
@@ -150,10 +150,8 @@ class TPEC:
                 new_pop += best_candidate # a bit sloppy, but works
                 ei_all_parents += best_ei_scores.tolist() # this should be one score
 
-            # Update population and archive of all evaluated individuals
-            assert(len(ei_all_parents) == self.config.pop_size)  
+            # Update population  
             self.population = new_pop
-            self.evaluated_individuals += self.population
 
             self.remove_failed_individuals()
             self.process_population_for_best()
@@ -161,7 +159,11 @@ class TPEC:
             print(f"Best training performance so far: {self.best_performance}")
 
             # Log per-iteration expected improvement statistics
+            assert(len(ei_all_parents) == self.config.pop_size) 
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)
+
+            # Append current population to archive of evaluated individuals 
+            self.evaluated_individuals += self.population
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
