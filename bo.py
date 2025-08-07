@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 import ray
 from ray import ObjectRef
 from config import Config
@@ -44,6 +45,10 @@ class BO:
             self.surrogate: Surrogate = TPE(self.config.rng)
 
         self.samples: List[Individual] = [] # This stores the observed samples
+
+        # to keep current best (tied) hyperparameter sets
+        self.best_performers: List[Dict] = []
+        self.best_performance = 1.0
 
         # For debugging
         self.hard_eval_count = 0
@@ -91,6 +96,12 @@ class BO:
             self.samples[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
+        # Remove individuals with positive performance
+        self.remove_failed_individuals()
+        # Update best performance and set of best performers in the current sample set
+        self.process_samples_for_best()
+        print(f"Initial sample size: {len(self.samples)}")
+        print(f"Best training performance so far: {self.best_performance}")
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
@@ -120,47 +131,52 @@ class BO:
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space)
 
             # Select the top candidate(s) for evaluation on the true objective
-            best_ind, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
+            best_candidates, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
             if self.config.debug: self.soft_eval_count += soft_eval_count
 
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
             # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
-            for ind in best_ind: # 'best_ind' may contain more than 1 Individual
+            for ind in best_candidates: # 'best_candidates' may contain more than 1 Individual
                 self.param_space.fix_parameters(ind.get_params()) # fixes in-place
 
             # Evaluate the chosen candidate(s)
             ray_candidate_evals: List[ObjectRef] = [
                 eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                for i, ind in enumerate(best_ind)
+                for i, ind in enumerate(best_candidates)
             ]
             while len(ray_candidate_evals) > 0:
                 done, ray_candidate_evals = ray.wait(ray_candidate_evals, num_returns = 1)
                 performance, index = ray.get(done)[0]
-                best_ind[index].set_performance(performance)
+                best_candidates[index].set_performance(performance)
                 if self.config.debug: self.hard_eval_count += 1
 
             # Update sample set
-            self.samples += best_ind
+            self.samples += best_candidates
 
-        # Get all individuals tied for best performance, randomly select one of the tied best individuals
-        self.samples.sort(key=lambda o: o.get_performance())
-        best_performance = self.samples[0].get_performance()
-        best_inds = [ind for ind in self.samples if ind.get_performance() == best_performance]
-        best_ind = self.config.rng.choice(best_inds)
+            # remove individuals with positive performance
+            self.remove_failed_individuals()
+            # Update best performance and set of best performers
+            self.process_samples_for_best()
+            print(f"Samples size at gen {gen}: {len(self.samples)}")
+            print(f"Best training performance so far: {self.best_performance}")
+
+        # randomly select one of the tied best individuals
+        assert len(self.best_performers) > 0, "No best performers found in the population."
+        best_ind_params = self.config.rng.choice(self.best_performers)
 
         # Final scores
-        train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),
+        train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
                                                            X_train, y_train, X_test, y_test, self.config.seed)
-        best_ind.set_train_score(train_accuracy)
-        best_ind.set_test_score(test_accuracy)
+        best_ind_params.set_train_score(train_accuracy)
+        best_ind_params.set_test_score(test_accuracy)
 
         # Log best, average, and median objective values in the final sample set
         self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand, 
                                    self.samples, f"{self.surrogate_type}BO")
         # Log the best observed hyperparameter configuration across all iterations
-        self.logger.log_best(best_ind, self.config, f"{self.surrogate_type}BO")
+        self.logger.log_best(best_ind_params, self.config, f"{self.surrogate_type}BO")
         self.logger.save(self.config, f"{self.surrogate_type}BO")
 
         if self.config.debug:
@@ -169,3 +185,45 @@ class BO:
             assert(len(self.samples) == self.config.evaluations)
 
         ray.shutdown()
+
+
+    # remove any individuals wiht a positive performance
+    def remove_failed_individuals(self) -> None:
+        """
+        Removes individuals with a positive performance from the population.
+        This is useful for ensuring that only individuals with negative performance are considered.
+        A positive performance indicates that the individual failed during evaluation and is not suitable for selection.
+        """
+        self.samples = [ind for ind in self.samples if ind.get_performance() <= 0.0]
+        if self.config.debug:
+            print(f"Removed individuals with positive performance, new population size: {len(self.samples)}")
+        return
+    
+    # return the best training performance from the population
+    def get_best_performance(self) -> float:
+        """
+        Returns the best training performance from the population.
+        """
+        if not self.samples:
+            raise ValueError("Population is empty, cannot get best training performance.")
+        return min([ind.get_performance() for ind in self.samples])
+
+    # process the current sample set and update self.best_performers and self.best_performance
+    def process_samples_for_best(self) -> None:
+        """
+        Processes the current population and updates self.best_performers and self.best_performance.
+        """
+        current_best = self.get_best_performance()
+
+        # check if we have found a better performance
+        if current_best < self.best_performance:
+            self.best_performance = current_best
+            self.best_performers = []
+
+        # add all individuals with the current best performance to the best performers
+        for ind in self.samples:
+            if ind.get_performance() == self.best_performance:
+                self.best_performers.append(copy.deepcopy(ind.get_params()))
+
+        assert len(self.best_performers) > 0, "No best performers found in the population."
+        return

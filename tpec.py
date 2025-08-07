@@ -1,10 +1,10 @@
 import numpy as np
-import copy
+import copy 
 import ray
 from ray import ObjectRef
 from config import Config
 from logger import Logger
-from typing import List
+from typing import List, Dict
 from ea import EA
 from tpe import TPE
 from individual import Individual
@@ -22,6 +22,10 @@ class TPEC:
 
         self.population: List[Individual] = []
         self.evaluated_individuals: List[Individual] = [] # archive of every individual evaluated so far
+
+        # to keep current best Individuals
+        self.best_performance = 1.0
+        self.best_performers: List[Dict] = []
 
         # For debugging
         self.hard_eval_count = 0 # evaluations on the true objective
@@ -57,9 +61,6 @@ class TPEC:
         ]
         # Process results as they come in
         while len(ray_evals) > 0:
-            # ray.wait() returns a list of references to completed results & a list of remaining jobs. 
-            # We remove the finished jobs from ray_evals by updating it to be the list of remaining jobs
-            # Here we set 'num_returns' to 1, so it returns one finished reference at a time
             done, ray_evals = ray.wait(ray_evals, num_returns = 1)
             # Extract the only result (Tuple[float, int]) from the 'done' list
             performance, index = ray.get(done)[0] 
@@ -70,12 +71,19 @@ class TPEC:
         self.evaluated_individuals += self.population
         assert(len(self.evaluated_individuals) == len(self.population))
 
+        # Remove individuals with positive performance
+        self.remove_failed_individuals()
+        # Update best performance and set of best performers
+        self.process_population_for_best()
+        print(f"Initial population size: {len(self.population)}")
+        print(f"Best training performance so far: {self.best_performance}")
+
         generations = (self.config.evaluations // self.config.pop_size) - 1
         for gen in range(generations):
             # Log population performance
             self.logger.log_generation(gen, self.config.pop_size * (gen + 1), self.population, "TPEC")
 
-            # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to 0
+            # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to ~0
             for ind in self.evaluated_individuals:
                 params = ind.get_params()
                 for name in params:
@@ -86,7 +94,7 @@ class TPEC:
             # Fit TPE to the archive of all observed individuals 
             self.tpe.fit(self.evaluated_individuals, self.param_space)
 
-            # Fix the archive again
+            # Fix the archive again to align with scikit-learn requirements
             for ind in self.evaluated_individuals:
                 self.param_space.fix_parameters(ind.get_params())
 
@@ -117,53 +125,56 @@ class TPEC:
                             params[name] = .0001
                     ind.set_params(params)
 
-                # Evaluate each candidate's expected improvement score, choose best
-                # There should be a single top candidate per parent
-                best_ind, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1) 
+                # Evaluate each candidate's expected improvement score, suggest one
+                best_candidate, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1) 
                 if self.config.debug: self.soft_eval_count += se_count
 
                 # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
-                for ind in best_ind: # 'best_ind' should contain a single Individual
+                for ind in best_candidate: # 'best_candidate' should contain a single Individual
                     self.param_space.fix_parameters(ind.get_params()) # fixes in-place
 
                 # Evaluate best candidate(s) on the true objective.
-                # The system allows 'best_ind' to contain more than one Individual (num_top_cand >= 1),
+                # The system allows 'best_candidate' to contain more than one Individual (num_top_cand >= 1),
                 # but in TPEC, this is always set to 1. 
                 ray_child_evals: List[ObjectRef] = [
                     eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                    for i, ind in enumerate(best_ind) # should be 1 ind, by default
+                    for i, ind in enumerate(best_candidate) # should be 1 ind, by default
                 ]
                 while len(ray_child_evals) > 0:
                     done, ray_child_evals = ray.wait(ray_child_evals, num_returns = 1)
                     performance, index = ray.get(done)[0]
-                    best_ind[index].set_performance(performance)
+                    best_candidate[index].set_performance(performance)
                     if self.config.debug: self.hard_eval_count += 1
 
-                # If num_top_cand = 1, one offspring is produced per parent
-                new_pop += best_ind # a bit sloppy, but works
+                # Append to new population
+                new_pop += best_candidate # a bit sloppy, but works
                 ei_all_parents += best_ei_scores.tolist() # this should be one score
 
+            # Update population and archive of all evaluated individuals
             assert(len(ei_all_parents) == self.config.pop_size)  
             self.population = new_pop
             self.evaluated_individuals += self.population
 
+            self.remove_failed_individuals()
+            self.process_population_for_best()
+            print(f"Population size at gen {gen}: {len(self.population)}")
+            print(f"Best training performance so far: {self.best_performance}")
+
             # Log per-iteration expected improvement statistics
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)
 
-        # Get all individuals tied for best performance, randomly select one of the tied best individuals
-        self.population.sort(key=lambda o: o.get_performance()) # lowest first
-        best_performance = self.population[0].get_performance()
-        best_inds = [ind for ind in self.population if ind.get_performance() == best_performance]
-        best_ind = self.config.rng.choice(best_inds)
+        # randomly select one of the tied best individuals
+        assert len(self.best_performers) > 0, "No best performers found in the population."
+        best_ind_params = self.config.rng.choice(self.best_performers)
 
         # Final scores
-        train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind.get_params(),
+        train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
                                                            X_train, y_train, X_test, y_test, self.config.seed)
-        best_ind.set_train_score(train_accuracy)
-        best_ind.set_test_score(test_accuracy)
+        best_ind_params.set_train_score(train_accuracy)
+        best_ind_params.set_test_score(test_accuracy)
 
         self.logger.log_generation(generations, self.config.pop_size * (generations + 1), self.population, "TPEC")
-        self.logger.log_best(best_ind, self.config, "TPEC")
+        self.logger.log_best(best_ind_params, self.config, "TPEC")
         self.logger.save(self.config, "TPEC")
 
         if self.config.debug:
@@ -171,3 +182,44 @@ class TPEC:
             print(f"Soft evaluations {self.soft_eval_count}")
 
         ray.shutdown()
+
+    # remove any individuals wiht a positive performance
+    def remove_failed_individuals(self) -> None:
+        """
+        Removes individuals with a positive performance from the population.
+        This is useful for ensuring that only individuals with negative performance are considered.
+        A positive performance indicates that the individual failed during evaluation and is not suitable for selection.
+        """
+        self.population = [ind for ind in self.population if ind.get_performance() <= 0.0]
+        if self.config.debug:
+            print(f"Removed individuals with positive performance, new population size: {len(self.population)}")
+        return
+
+    # return the best training performance from the population
+    def get_best_performance(self) -> float:
+        """
+        Returns the best training performance from the population.
+        """
+        if not self.population:
+            raise ValueError("Population is empty, cannot get best training performance.")
+        return min([ind.get_performance() for ind in self.population])
+
+    # process the current population and update self.best_performers and self.best_performance
+    def process_population_for_best(self) -> None:
+        """
+        Processes the current population and updates self.best_performers and self.best_performance.
+        """
+        current_best = self.get_best_performance()
+
+        # check if we have found a better performance
+        if current_best < self.best_performance:
+            self.best_performance = current_best
+            self.best_performers = []
+
+        # add all individuals with the current best performance to the best performers
+        for ind in self.population:
+            if ind.get_performance() == self.best_performance:
+                self.best_performers.append(copy.deepcopy(ind.get_params()))
+
+        assert len(self.best_performers) > 0, "No best performers found in the population."
+        return
