@@ -116,7 +116,9 @@ class BO:
                 for name in params:
                     if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
                         params[name] = .0001
-                # ind.set_params(params) # TODO: technically not needed? Since ind.get_params() returns by reference
+                # TODO: technically not needed? Since ind.get_params() returns by reference. If this is not the case,
+                # we'll know because the surrogate can't be fit. 
+                # ind.set_params(params) 
 
             # Fit the surrogate to the observed data
             self.surrogate.fit(self.samples, self.param_space)
