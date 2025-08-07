@@ -17,11 +17,11 @@ def main():
                         help = "Population size.")
     parser.add_argument('--num_candidates', type=int, default=10,
                         help="Number of candidate offspring produced per parent for TPEC.")
-    parser.add_argument("--tour_size", type = int, default = 2, 
+    parser.add_argument("--tour_size", type = int, default = 2,
                         help = "Tournament size for selection.")
     parser.add_argument("--mut_rate", type = float, default = 0.1,
                         help = "Mutation rate per gene.")
-    parser.add_argument('--task_id', type = int, default = 359959, 
+    parser.add_argument('--task_id', type = int, default = 359959,
                         help = "OpenML task ID to use for hyperparameter tuning.")
     parser.add_argument("--logdir", type = str, default = "results",
                         help = "Directory to store logs and results.")
@@ -38,7 +38,7 @@ def main():
     rng_ = np.random.default_rng(args.seed)
     X_train, y_train, X_test, y_test = load_task(task_id = args.task_id, data_dir = "data")
     param_space = param_space_factory(args.model, rng_)
-    
+
     config = Config(
         seed = args.seed,
         evaluations = args.evaluations,
