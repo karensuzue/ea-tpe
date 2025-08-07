@@ -112,7 +112,7 @@ class TPEC:
 
             for parent in parents:
                 # Each parent produces 'num_candidates' candidate offsprings (10 by default)
-                candidates = [copy.deepcopy(parent) for _ in range(self.config.num_candidates)]
+                candidates = [Individual(copy.deepcopy(parent.get_params())) for _ in range(self.config.num_candidates)]
                 for child in candidates:
                     # Mutations occur in place, should also include fixing
                     self.param_space.mutate_parameters(child.get_params(), self.config.mut_rate)
@@ -128,10 +128,12 @@ class TPEC:
                 # Evaluate each candidate's expected improvement score, suggest one
                 best_candidate, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1) 
                 if self.config.debug: self.soft_eval_count += se_count
+                assert len(best_candidate) == 1
 
                 # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
                 for ind in best_candidate: # 'best_candidate' should contain a single Individual
                     self.param_space.fix_parameters(ind.get_params()) # fixes in-place
+                
 
                 # Evaluate best candidate(s) on the true objective.
                 # The system allows 'best_candidate' to contain more than one Individual (num_top_cand >= 1),
@@ -176,7 +178,6 @@ class TPEC:
                         performance=self.best_performance,
                         train_score=train_accuracy,
                         test_score=test_accuracy)
-
 
         self.logger.log_generation(generations, self.config.pop_size * (generations + 1), self.population, "TPEC")
         self.logger.log_best(best_ind, self.config, "TPEC")
