@@ -169,14 +169,16 @@ class BO:
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
                                                            X_train, y_train, X_test, y_test, self.config.seed)
-        best_ind_params.set_train_score(train_accuracy)
-        best_ind_params.set_test_score(test_accuracy)
+        best_ind = Individual(params=best_ind_params,
+                              performance=self.best_performance,
+                              train_score=train_accuracy,
+                              test_score=test_accuracy)
 
         # Log best, average, and median objective values in the final sample set
         self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand, 
                                    self.samples, f"{self.surrogate_type}BO")
         # Log the best observed hyperparameter configuration across all iterations
-        self.logger.log_best(best_ind_params, self.config, f"{self.surrogate_type}BO")
+        self.logger.log_best(best_ind, self.config, f"{self.surrogate_type}BO")
         self.logger.save(self.config, f"{self.surrogate_type}BO")
 
         if self.config.debug:

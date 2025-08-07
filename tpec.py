@@ -170,11 +170,14 @@ class TPEC:
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
                                                            X_train, y_train, X_test, y_test, self.config.seed)
-        best_ind_params.set_train_score(train_accuracy)
-        best_ind_params.set_test_score(test_accuracy)
+        best_ind = Individual(params=best_ind_params,
+                        performance=self.best_performance,
+                        train_score=train_accuracy,
+                        test_score=test_accuracy)
+
 
         self.logger.log_generation(generations, self.config.pop_size * (generations + 1), self.population, "TPEC")
-        self.logger.log_best(best_ind_params, self.config, "TPEC")
+        self.logger.log_best(best_ind, self.config, "TPEC")
         self.logger.save(self.config, "TPEC")
 
         if self.config.debug:
