@@ -9,7 +9,7 @@ from typing import Tuple, Dict, List, TypedDict, Any, Literal, Union
 # Literal says a value must be exactly one of the specified literals
 class IntParam(TypedDict):
     bounds: Tuple[int, int]
-    type: Literal["int"] 
+    type: Literal["int"]
 
 class FloatParam(TypedDict):
     bounds: Tuple[float, float]
@@ -30,13 +30,13 @@ ParamSpace = Dict[str, ParamSpec] # {parameter_name: {"bounds": Tuple, "type": L
 
 @typechecked
 class ModelParams(ABC):
-    """    
+    """
     This class encapsulates the parameter space and provides
     helper methods for mutation and random sampling.
     """
     def __init__(self, param_space: ParamSpace, rng: np.random.default_rng):
         # self.random_state = random_state  # random_state is a seed
-        self.param_space = param_space 
+        self.param_space = param_space
         self.rng = rng # already seeded
 
     def get_parameter_space(self) -> ParamSpace:
@@ -98,7 +98,7 @@ class ModelParams(ABC):
         # rng = np.random.default_rng(rng_)
         # pick a new value from the choices
         return self.rng.choice(choices)
-    
+
     @abstractmethod
     def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1) -> None:
         """ Mutates a given set of hyperparameters in-place. """
@@ -119,7 +119,7 @@ class ModelParams(ABC):
 class RandomForestParams(ModelParams):
     def __init__(self, rng: np.random.default_rng, offset: float = 1e-6):
         self.rng = rng
-        
+
         self.param_space =  {
             'n_estimators': {'bounds': (10, 1000), 'type': 'int'}, # int
             'criterion': {'bounds': ('gini', 'entropy', 'log_loss'), 'type': 'cat'}, # categorical
@@ -132,13 +132,13 @@ class RandomForestParams(ModelParams):
             'max_samples': {'bounds': (.001, 1.0 - offset), 'type': 'float'},  # float
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
-    
+
     def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1) -> None:
         """
         Mutates the model parameters (genotype) in-place with a given mutation rate.
 
-        Parameters: 
-            model_params (Dict[str, Any]): The set of hyperparameters to mutate. 
+        Parameters:
+            model_params (Dict[str, Any]): The set of hyperparameters to mutate.
             mut_rate (float): Probability of mutating each parameter.
         """
         # Per-gene mutation
@@ -157,8 +157,8 @@ class RandomForestParams(ModelParams):
 
         # Fix the parameters to ensure they are valid
         self.fix_parameters(model_params)
-    
-    
+        return
+
     def generate_random_parameters(self) -> Dict[str, Any]:
         """
         Generates a random set of parameter values based on the defined parameter space.
@@ -174,26 +174,24 @@ class RandomForestParams(ModelParams):
                 rand_genotype[param_name] = int(self.rng.integers(*spec["bounds"]))
             elif spec["type"] == "float":
                 rand_genotype[param_name] = float(self.rng.uniform(*spec["bounds"]))
-            # elif spec["type"] == "cat":
-            #     rand_genotype[param_name] = str(self.rng.choice(spec["bounds"]))
-            # elif spec["type"] == "bool":
-            #     rand_genotype[param_name] = bool(self.rng.choice(spec["bounds"]))
             elif spec["type"] in {"cat", "bool"}:
                 rand_genotype[param_name] = self.rng.choice(spec["bounds"])
             else:
                 raise ValueError(f"Unsupported parameter type: {spec['type']}")
+        # Fix the parameters to ensure they are valid
+        self.fix_parameters(rand_genotype)
         return rand_genotype
-    
+
     def get_param_type(self, key: str) -> str:
         """ Returns the type of a given parameter. """
         # This should automatically raise a KeyError if 'key' does not exist
         return self.param_space[key]['type']
-    
+
     def get_params_by_type(self, type: str) -> ParamSpace:
         """ Retrieves a subset of parameters of a given type. """
         if type not in ['int', 'float', 'cat', 'bool']:
             raise ValueError(f"Unsupported parameter type: {type}")
-        return {name: info for name, info in self.param_space.items() 
+        return {name: info for name, info in self.param_space.items()
                 if info['type'] == type}
 
     # @staticmethod
@@ -205,6 +203,3 @@ class RandomForestParams(ModelParams):
         if model_params['bootstrap'] and model_params['max_samples'] is None:
             model_params['max_samples'] = float(self.rng.uniform(*self.param_space['max_samples']['bounds']))
         return
-    
-
-
