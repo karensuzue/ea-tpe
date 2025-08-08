@@ -37,13 +37,32 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
         return 1.0, index  # Return a high score to avoid selecting this individual
     return -1.0 * score, index  # minimize
 
-
 def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     if model == 'RF':
         # print("Final evaluations for RF") # debug
         return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
     else:
         raise ValueError(f"Unsupported model: {model}")
+
+def bo_eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, n_jobs: int) -> float:
+    """
+    Evaluates a given set of hyperparameters on cross-validated accuracy.
+
+    Parameters:
+        model_params (Dict[str, Any]): The set of hyperparameters to evaluate.
+    """
+    # Must use the same seed/random_state across parameters and methods,
+    # to maintain the same CV splits
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed) # initialize our cv splitter
+    # Both model internals and data splits are reproducible
+    model = RandomForestClassifier(**model_params, random_state=seed, n_jobs=n_jobs)
+
+    try:
+        score = cross_val_score(model, X_train, y_train, cv=cv, scoring='accuracy').mean()
+    except Exception as e:
+        print(f"Error evaluating model parameters {model_params}: {e}")
+        return 1.0  # Return a high score to avoid selecting this individual
+    return -1.0 * score  # minimize
 
 @ray.remote
 def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
