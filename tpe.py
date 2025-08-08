@@ -9,8 +9,8 @@ from typeguard import typechecked
 
 @typechecked
 class MultivariateKDE:
-    """  
-    Multivariate Gaussian KDE with floor to prevent zero likelihood. 
+    """
+    Multivariate Gaussian KDE with floor to prevent zero likelihood.
     This wrapper over 'scipy.stats.gaussian_kde' supports optional bandwidth scaling
     and enforces a minimum density 'eps' to avoid zero likelihood values.
     """
@@ -18,26 +18,26 @@ class MultivariateKDE:
         """
         Parameters:
         - data : ndarray, shape=(d,n)
-            'd' (row) is the number of dimensions or features 
+            'd' (row) is the number of dimensions or features
             'n' (column) is the number of samples
             For example, np.array([[1, 2, 3],     # dimension 1 values
                                    [4, 5, 6]])    # dimension 2 values
         - bw_factor: float
-            Scaling factor for the KDE bandwidth. 
+            Scaling factor for the KDE bandwidth.
             The base bandwidth is chosen using Silverman's rule, then scaled by this factor.
         - eps : float
             Minimum floor value for the estimated density. Returned densities will be at least this value.
         """
-        self.rng = rng
+        # self.rng = rng
 
         # If there is only 1 sample (n=1), KDE will fail
         if data.shape[1] == 1:
             data = np.hstack([data, data + 1e-3]) # duplicate it slightly
-        
+
         # Check if covariance matrix is singular: must have >1 distinct samples
         if np.linalg.matrix_rank(np.cov(data)) < data.shape[0]:
             # Add small noise to escape colinearity
-            data = data + self.rng.normal(scale=1e-3, size=data.shape) 
+            data = data + rng.normal(scale=1e-3, size=data.shape)
 
         self.kde = gaussian_kde(data, bw_method='silverman')
         self.kde.set_bandwidth(self.kde.factor * bw_factor)
@@ -58,50 +58,51 @@ class MultivariateKDE:
         vec = np.asarray(vec) # reshape to (d, )
         if vec.ndim == 1:
             vec = vec[:, None] # reshape to (d, 1)
-        # Returns an array of shape (m,), corresponding to 1 density value per point   
-        return np.maximum(self.kde.pdf(vec), self.eps)  
-    
-    def sample(self, n_samples = 1) -> np.ndarray:
-        """ 
-        Sample n new points from the estimated distribution. 
+        # Returns an array of shape (m,), corresponding to 1 density value per point
+        return np.maximum(self.kde.pdf(vec), self.eps)
+
+    def sample(self, rng: np.random.default_rng, n_samples = 1) -> np.ndarray:
+        """
+        Sample n new points from the estimated distribution.
         Returns a matrix of shape (dimensions, n_samples)
         """
         # For reproducibility, pull an int seed from the generator
-        int_seed = self.rng.integers(0, 2**32 - 1)
-        return self.kde.resample(size=n_samples, seed=int_seed) # shape (dimensions, n_samples)
+        # int_seed = self.rng.integers(0, 2**32 - 1)
+        # return self.kde.resample(size=n_samples, seed=int_seed) # shape (dimensions, n_samples)
+        return self.kde.resample(size=n_samples, seed=rng) # shape (dimensions, n_samples)
 
 class CategoricalPMF:
-    """ 
+    """
     Categorical probability mass function with Laplace smoothing to avoid zero probabilities.
     Computes smoothed category probabilities based on observed frequencies,
     ensuring all categories have non-zero likelihood (with smoothing factor 'alpha').
     """
 
-    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str] | Tuple[bool], 
-                 rng: np.random.default_rng, alpha = 1.0):
+    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str] | Tuple[bool],
+                 alpha = 1.0):
         """
         Parameters:
         - values: Iterable[str]
             List or iterable of observed categorical values.
         - all_categories: List[str]
-            The full list of possible categories to support in the distribution. 
+            The full list of possible categories to support in the distribution.
         - alpha: float
             Laplace smoothing parameter. Higher values increase the uniformity of the distribution.
         """
-        self.rng = rng
+        # self.rng = rng
 
         self.all_categories = all_categories
 
         # Count the frequency of each category in 'values'
-        counts = Counter(values) 
+        counts = Counter(values)
         total = sum(counts[c] + alpha for c in all_categories)
         self.prob: Dict = {c: (counts[c] + alpha) / total for c in all_categories}
         self.eps = 1e-12
 
     def pmf(self, x):
-        """ 
+        """
         Evaluate the smoothed probability of a category 'x' if it was part of
-        'all_categories'; otherwise, returns 'self.eps' to avoid zero likelihood. 
+        'all_categories'; otherwise, returns 'self.eps' to avoid zero likelihood.
 
         Parameters:
         - x: Any
@@ -109,26 +110,28 @@ class CategoricalPMF:
         """
         return self.prob.get(x, self.eps)
 
-    def sample(self, n_samples = 1) -> List[str] | List[bool]:
+    def sample(self, rng: np.random.default_rng, n_samples = 1) -> List[str] | List[bool]:
         """
         Sample n categories from the categorical PMF.
 
         Parameters:
-            n_samples (int): Number of samples to draw.
+        - rng: np.random.default_rng
+        - n_samples (int): Number of samples to draw.
 
         Returns:
-            List: List of sampled categories (length = n_samples) if n_samples > 1, 
+            List: List of sampled categories (length = n_samples) if n_samples > 1,
             otherwise a single sampled value.
         """
         probabilities = list(self.prob.values())
-        samples = self.rng.choice(self.all_categories, size=n_samples, p=probabilities)
+        # samples = self.rng.choice(self.all_categories, size=n_samples, p=probabilities)
+        samples = rng.choice(self.all_categories, size=n_samples, p=probabilities)
         return samples.tolist()
 
 class TPE(Surrogate):
     """
     Tree-structured Parzen Estimator (TPE) Solver for hyperparameter optimization.
-    This class supports both categorical and numeric parameters, 
-    and uses kernel density estimation (KDE) and probability mass functions (PMFs) 
+    This class supports both categorical and numeric parameters,
+    and uses kernel density estimation (KDE) and probability mass functions (PMFs)
     to model the likelihood of good and bad configurations.
     """
     def __init__(self, rng: np.random.default_rng, gamma: float = 0.2):
@@ -136,7 +139,7 @@ class TPE(Surrogate):
         Parameters:
             gamma (float): Fraction of samples considered "good".
         """
-        self.rng = rng
+        # self.rng = rng
 
         self.gamma = gamma # splitting parameter
 
@@ -145,11 +148,11 @@ class TPE(Surrogate):
         self.multi_g: MultivariateKDE = None  # bad, numeric
         self.cat_l: Dict[str, CategoricalPMF] = {} # good, categorical
         self.cat_g: Dict[str, CategoricalPMF] = {} # bad, categorical
-    
-    def sample(self, num_samples: int, param_space: ModelParams) -> List[Individual]:
+
+    def sample(self, num_samples: int, param_space: ModelParams, rng: np.random.default_rng) -> List[Individual]:
         """
-        Returns 'num_samples' Individuals. 
-        For each Individual's params, sample from the "good" MultivariateKDE and CategoricalPMFs separately, 
+        Returns 'num_samples' Individuals.
+        For each Individual's params, sample from the "good" MultivariateKDE and CategoricalPMFs separately,
         then reassemble into a full set of hyperparameters.
         """
         numeric_params = {
@@ -162,8 +165,8 @@ class TPE(Surrogate):
 
         # params: Dict[str, Any] = {} # shape (dimensions, n_samples)
 
-        # Sample from the good numeric distribution 
-        multi_samples = self.multi_l.sample(num_samples) # shape (dimensions, n_samples)
+        # Sample from the good numeric distribution
+        multi_samples = self.multi_l.sample(rng=rng, n_samples=num_samples) # shape (dimensions, n_samples)
         assert(multi_samples.shape[0] == len(numeric_params_names))
         assert(multi_samples.shape[1] == num_samples)
 
@@ -188,14 +191,14 @@ class TPE(Surrogate):
 
         # Sample from the good categorical distribution
         for name, dist in self.cat_l.items():
-            params[name] = dist.sample(num_samples)
-        
+            params[name] = dist.sample(rng=rng, n_samples=num_samples)
+
         assert all(len(v) == num_samples for v in params.values())
 
-        samples: List[Individual] = [] 
+        samples: List[Individual] = []
         for i in range(num_samples):
             # Map name to a single value
-            ind_params = {name: params[name][i] for name in param_space.param_space} 
+            ind_params = {name: params[name][i] for name in param_space.param_space}
             ind = Individual(ind_params)
             samples.append(ind)
 
@@ -203,11 +206,11 @@ class TPE(Surrogate):
         return samples
 
     def split_samples(self, samples: List[Individual]) -> Tuple[List[Individual], List[Individual]]:
-        """ 
+        """
         Splits a given sample set into 'good' and 'bad' groups based on
         the objective.
-        
-        Parameters: 
+
+        Parameters:
             samples (List[Individual]): The sample set to split.
 
         Returns:
@@ -215,22 +218,22 @@ class TPE(Surrogate):
         """
         if len(samples) < 2:
             raise RuntimeError("Need at least 2 samples before TPE can fit.")
-        
+
         # Sort population/samples set (lowest/best first)
         samples.sort(key=lambda o: o.get_performance())
         split_idx = max(1, int(len(samples) * self.gamma))
         good_samples = samples[:split_idx]
         bad_samples = samples[split_idx:]
         return good_samples, bad_samples
-    
-    def fit(self, samples: List[Individual], param_space: ModelParams) -> None:
-        """ 
+
+    def fit(self, samples: List[Individual], param_space: ModelParams, rng: np.random.default_rng) -> None:
+        """
         Fit probabilistic models (KDEs and PMFs) to the good and bad sample groups.
-        
+
         Parameters:
         """
         good_samples, bad_samples = self.split_samples(samples)
-        
+
         numeric_params = {
             **param_space.get_params_by_type('int'),
             **param_space.get_params_by_type('float'),
@@ -240,23 +243,20 @@ class TPE(Surrogate):
             **param_space.get_params_by_type('bool')
         }
 
-        # numeric_params_names = list(numeric_params.keys())
-        # print("NUMERIC PARAMETER NAMES (FIT): ", numeric_params_names)
-
         # For each sample set, extract values of numeric hyperparameters
         # Format shape (n_params, n_samples): [[value11, value12,...], [value21, value22, ...], ...]
-        # Each parameter has its own row 
-        good_num_samples = np.array([[o.get_params()[param_name] for o in good_samples] 
+        # Each parameter has its own row
+        good_num_samples = np.array([[o.get_params()[param_name] for o in good_samples]
                             for param_name in numeric_params])
-        bad_num_samples = np.array([[o.get_params()[param_name] for o in bad_samples] 
+        bad_num_samples = np.array([[o.get_params()[param_name] for o in bad_samples]
                             for param_name in numeric_params])
-        
+
         # Fit Multivariate KDEs
-        self.multi_l = MultivariateKDE(good_num_samples, self.rng)
-        self.multi_g = MultivariateKDE(bad_num_samples, self.rng)
+        self.multi_l = MultivariateKDE(good_num_samples, rng)
+        self.multi_g = MultivariateKDE(bad_num_samples, rng)
 
         # Fit independent PMFs
-        self.cat_l.clear() 
+        self.cat_l.clear()
         self.cat_g.clear()
         # Construct 2 PMFs (good and bad) for each categorical parameter
         # Format: {param_name: CategoricalPMF}
@@ -264,8 +264,7 @@ class TPE(Surrogate):
             param_name: CategoricalPMF(
                 # Extract categorical values from samples in (d, n) format
                 values = [o.get_params()[param_name] for o in good_samples],
-                all_categories = info["bounds"],
-                rng = self.rng
+                all_categories = info["bounds"]
             )
             for param_name, info in categorical_params.items()
         }
@@ -273,12 +272,11 @@ class TPE(Surrogate):
         self.cat_g = {
             param_name : CategoricalPMF(
                 values = [o.get_params()[param_name] for o in bad_samples],
-                all_categories = info["bounds"],
-                rng = self.rng
+                all_categories = info["bounds"]
             )
             for param_name, info in categorical_params.items()
         }
-
+        return
 
     def expected_improvement(self, param_space: ModelParams, candidates: List[Individual]) -> np.ndarray:
         """
@@ -287,7 +285,7 @@ class TPE(Surrogate):
         Parameters:
         - candidates: List[Individual]
             Candidate individuals to evaluate
-        
+
         Returns an array of EI scores, one per candidate.
         """
         ei_scores = []
@@ -304,10 +302,10 @@ class TPE(Surrogate):
                 num_vals = [params[param_name] for param_name in numeric_params] # (, d_num)
                 # 'num_vals' gets reshaped into (d_num, 1) here
                 l_num = float(self.multi_l.pdf(num_vals)) # a single density value
-                g_num = float(self.multi_g.pdf(num_vals)) 
+                g_num = float(self.multi_g.pdf(num_vals))
             else: # If no numeric parameters exist, no contribution
-                l_num = g_num = 1.0 
-            
+                l_num = g_num = 1.0
+
             # Categorical contribution (product of per-dim PMFs)
             l_cat = g_cat = 1.0
             # PMFs are univariate
@@ -316,7 +314,7 @@ class TPE(Surrogate):
                 gx = self.cat_g[param_name].pmf(params[param_name])
                 l_cat *= lx
                 g_cat *= gx
-            
+
             # To avoid NaN
             if (g_num * g_cat) <= 1e-12:
                 ei_scores.append(0.0)
@@ -326,16 +324,16 @@ class TPE(Surrogate):
         return np.asarray(ei_scores)
 
     def suggest(self, param_space: ModelParams, candidates: List[Individual], num_top_cand: int = 1) -> Tuple[List[Individual], np.ndarray, int]:
-        """ 
+        """
         Suggest the top-k candidates based on expected improvement.
 
         Parameters:
             candidates (List[Individual]): Candidate individuals to rank.
-            num_top_cand (int): Number of top candidates to return. 
+            num_top_cand (int): Number of top candidates to return.
 
         Returns:
             Tuple[List[Individual], np.ndarray, int]: A tuple containing the top candidates, their EI scores, and
-            the number of soft evaluations performed. 
+            the number of soft evaluations performed.
         """
         scores = self.expected_improvement(param_space, candidates)
 
@@ -348,6 +346,3 @@ class TPE(Surrogate):
         top_candidates = [candidates[int(i)] for i in sorted_indices]
         top_scores = scores[sorted_indices]
         return top_candidates, top_scores, soft_eval_count
-    
- 
-
