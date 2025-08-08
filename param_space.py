@@ -58,7 +58,7 @@ class ModelParams(ABC):
         pass
 
     @abstractmethod
-    def get_params_by_type(self, type: str) -> ParamSpace:
+    def get_params_by_type(self, type: str) -> Dict:
         """ Retrieves a subset of parameters of a given type. """
         pass
 
@@ -187,12 +187,11 @@ class RandomForestParams(ModelParams):
         # This should automatically raise a KeyError if 'key' does not exist
         return self.param_space[key]['type']
 
-    def get_params_by_type(self, type: str) -> ParamSpace:
+    def get_params_by_type(self, type: str) -> Dict:
         """ Retrieves a subset of parameters of a given type. """
         if type not in ['int', 'float', 'cat', 'bool']:
             raise ValueError(f"Unsupported parameter type: {type}")
-        return {name: info for name, info in self.param_space.items()
-                if info['type'] == type}
+        return {name: info for name, info in self.param_space.items() if info['type'] == type}
 
     # @staticmethod
     def fix_parameters(self, model_params: Dict[str, Any]) -> None:
