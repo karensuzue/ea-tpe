@@ -10,7 +10,7 @@ from surrogate import Surrogate
 from tpe import TPE
 from typeguard import typechecked
 from typing import Tuple, Dict, List, Literal
-from utils import eval_factory, eval_final_factory
+from utils import eval_factory, eval_final_factory, bo_eval_parameters_RF
 
 @typechecked
 class BO:
@@ -30,8 +30,8 @@ class BO:
         """
         Parameters:
             config (Config):
-            logger (Logger): 
-            param_space (ModelParams): 
+            logger (Logger):
+            param_space (ModelParams):
             surrogate (Literal["TPE", "GP"]):
             num_top_cand (int): The number of selected candidate(s) to observe and add to the set of observations.
         """
@@ -53,16 +53,16 @@ class BO:
         # For debugging
         self.hard_eval_count = 0
         self.soft_eval_count = 0
-    
+
     def get_samples(self) -> List[Individual]:
         return self.samples
-    
+
     def set_samples(self, samples: List[Individual]):
         self.samples = samples
 
     def run(self, X_train, y_train, X_test, y_test):
-        """ 
-        Run BO with parallelized fitness evaluations using Ray. 
+        """
+        Run BO with parallelized fitness evaluations using Ray.
 
         Parameters:
             X_train, y_train: The training data.
@@ -71,20 +71,16 @@ class BO:
         # Initialize Ray
         if not ray.is_initialized():
             ray.init(num_cpus = self.config.num_cpus, include_dashboard = True)
-        
+
         # Initialize observed sample set, its size is determined by the 'pop_size' parameter in the Config
         self.samples = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
 
-        # Make sure parameters align with scikit-learn's requirements before CV evaluations
-        for ind in self.samples:
-            self.param_space.fix_parameters(ind.get_params()) # fixes in-place 
-
-        # Create Ray ObjectRefs to efficiently share across multiple Ray tasks 
+        # Create Ray ObjectRefs to efficiently share across multiple Ray tasks
         X_train_ref = ray.put(X_train)
         y_train_ref = ray.put(y_train)
 
         # Evaluate initial samples with Ray
-        ray_evals: List[ObjectRef] = [ 
+        ray_evals: List[ObjectRef] = [
             eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
             for i, ind in enumerate(self.samples) # each ObjectRef leads to a Tuple[float, int]
         ]
@@ -92,7 +88,7 @@ class BO:
         while len(ray_evals) > 0:
             done, ray_evals = ray.wait(ray_evals, num_returns = 1)
             # Extract the only result (Tuple[float, int]) from the 'done' list
-            performance, index = ray.get(done)[0] 
+            performance, index = ray.get(done)[0]
             self.samples[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
@@ -103,34 +99,26 @@ class BO:
         print(f"Initial sample size: {len(self.samples)}")
         print(f"Best training performance so far: {self.best_performance}")
 
+        # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
+        for ind in self.samples:
+            params = ind.get_params()
+            for name in params:
+                if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
+                    params[name] = 1.0e-16
+                if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
+                    params[name] = 0
+
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
             # Log best, average, and median objective values in the current sample set
-            self.logger.log_generation(gen, self.config.pop_size + gen * self.num_top_cand, 
+            self.logger.log_generation(gen, self.config.pop_size + gen * self.num_top_cand,
                                        self.samples, f"{self.surrogate_type}BO")
 
-            # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
-            # NOTE: parameters will need to be fixed again later
-            for ind in self.samples:
-                params = ind.get_params()
-                for name in params:
-                    if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
-                        params[name] = .0001
-                # TODO: technically not needed? Since ind.get_params() returns by reference. If this is not the case,
-                # we'll know because the surrogate can't be fit. 
-                # ind.set_params(params) 
-
             # Fit the surrogate to the observed data
-            self.surrogate.fit(self.samples, self.param_space)
-
-            # Make sure all samples are fixed again
-            for ind in self.samples:
-                self.param_space.fix_parameters(ind.get_params()) # this works because references, can confirm by printing
+            self.surrogate.fit(self.samples, self.param_space, self.config.rng)
 
             # Sample enough candidates from the surrogate to keep the number of 'soft' evaluations consistent between BO and TPEC
-            # We define 'soft' evaluations to be those performed on the surrogate
-            # NOTE: these candidates should still need fixing
-            candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space)
+            candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space, self.config.rng)
 
             # Select the top candidate(s) for evaluation on the true objective
             best_candidates, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
@@ -143,16 +131,22 @@ class BO:
             for ind in best_candidates: # 'best_candidates' may contain more than 1 Individual
                 self.param_space.fix_parameters(ind.get_params()) # fixes in-place
 
-            # Evaluate the chosen candidate(s)
-            ray_candidate_evals: List[ObjectRef] = [
-                eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                for i, ind in enumerate(best_candidates)
-            ]
-            while len(ray_candidate_evals) > 0:
-                done, ray_candidate_evals = ray.wait(ray_candidate_evals, num_returns = 1)
-                performance, index = ray.get(done)[0]
-                best_candidates[index].set_performance(performance)
-                if self.config.debug: self.hard_eval_count += 1
+            for ind in best_candidates:
+                ind.set_performance(bo_eval_parameters_RF(ind.get_params(),
+                                                          X_train,
+                                                          y_train,
+                                                          self.config.seed,
+                                                          self.config.num_cpus))
+                self.hard_eval_count += 1
+
+            # must update best candidates for the surrogate
+            for ind in best_candidates:
+                params = ind.get_params()
+                for name in params:
+                    if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
+                        params[name] = 1.0e-16
+                    if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
+                        params[name] = 0
 
             # Update sample set
             self.samples += best_candidates
@@ -168,6 +162,9 @@ class BO:
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
 
+        # revert samples for best_ind
+        self.param_space.fix_parameters(best_ind_params)
+
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
                                                            X_train, y_train, X_test, y_test, self.config.seed)
@@ -176,8 +173,10 @@ class BO:
                               train_score=train_accuracy,
                               test_score=test_accuracy)
 
+
+
         # Log best, average, and median objective values in the final sample set
-        self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand, 
+        self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand,
                                    self.samples, f"{self.surrogate_type}BO")
         # Log the best observed hyperparameter configuration across all iterations
         self.logger.log_best(best_ind, self.config, f"{self.surrogate_type}BO")
@@ -202,7 +201,7 @@ class BO:
         if self.config.debug:
             print(f"Removed individuals with positive performance, new population size: {len(self.samples)}")
         return
-    
+
     # return the best training performance from the population
     def get_best_performance(self) -> float:
         """
