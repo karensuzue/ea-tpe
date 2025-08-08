@@ -11,8 +11,8 @@ class Surrogate(ABC):
     Pluggable surrogate model for the Bayesian Optimizer.
     """
     @abstractmethod
-    def fit(self, samples: List[Individual], param_space: ModelParams) -> None:
-        """ 
+    def fit(self, samples: List[Individual], param_space: ModelParams, rng: np.random.default_rng) -> None:
+        """
         Fit the model to a set of observations.
 
         Parameters:
@@ -26,17 +26,17 @@ class Surrogate(ABC):
 
         Parameters:
             candidates (List[Individual]): Candidate hyperparameter sets to rank.
-            num_top_cand (int): Number of top candidates to return. 
+            num_top_cand (int): Number of top candidates to return.
 
         Returns:
-            Tuple[List[ModelParams], np.ndarray, int]: A tuple containing the top-k candidates, their scores, 
+            Tuple[List[ModelParams], np.ndarray, int]: A tuple containing the top-k candidates, their scores,
                                                         and the number of soft evaluations performed.
         """
         pass
-    
+
     @abstractmethod
-    def sample(self, num_samples: int, param_space: ModelParams | None) -> List[Individual]:
+    def sample(self, num_samples: int, param_space: ModelParams, rng: np.random.default_rng) -> List[Individual]:
         """
         Returns 'num_samples' samples
-        param_space may be necessary to figure out which parameter a value belongs to. 
+        param_space may be necessary to figure out which parameter a value belongs to.
         """
