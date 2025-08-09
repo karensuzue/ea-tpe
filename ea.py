@@ -8,7 +8,7 @@ from individual import Individual
 from param_space import ModelParams
 from typeguard import typechecked
 from typing import List, Tuple, Dict
-from utils import eval_factory, eval_final_factory
+from utils import ray_eval_factory, eval_final_factory
 import copy as cp
 
 @typechecked
@@ -106,7 +106,7 @@ class EA:
 
         # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
         ray_evals: List[ObjectRef] = [
-            eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+            ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
             for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
         ]
         # Process results as they come in
@@ -132,7 +132,7 @@ class EA:
 
             # Evaluate offspring with Ray
             ray_child_evals: List[ObjectRef] = [
-                eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+                ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
                 for i, ind in enumerate(self.population)
             ]
             while len(ray_child_evals) > 0:

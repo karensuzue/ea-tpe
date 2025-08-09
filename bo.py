@@ -10,7 +10,7 @@ from surrogate import Surrogate
 from tpe import TPE
 from typeguard import typechecked
 from typing import Tuple, Dict, List, Literal
-from utils import eval_factory, eval_final_factory, bo_eval_parameters_RF
+from utils import ray_eval_factory, eval_factory, eval_final_factory
 
 @typechecked
 class BO:
@@ -81,7 +81,7 @@ class BO:
 
         # Evaluate initial samples with Ray
         ray_evals: List[ObjectRef] = [
-            eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+            ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
             for i, ind in enumerate(self.samples) # each ObjectRef leads to a Tuple[float, int]
         ]
         # Process results as they come in
@@ -132,11 +132,12 @@ class BO:
                 self.param_space.fix_parameters(ind.get_params()) # fixes in-place
 
             for ind in best_candidates:
-                ind.set_performance(bo_eval_parameters_RF(ind.get_params(),
-                                                          X_train,
-                                                          y_train,
-                                                          self.config.seed,
-                                                          self.config.num_cpus))
+                ind.set_performance(eval_factory(self.config.model,
+                                                    ind.get_params(),
+                                                    X_train,
+                                                    y_train,
+                                                    self.config.seed,
+                                                    self.config.num_cpus))
                 self.hard_eval_count += 1
 
             # must update best candidates for the surrogate
@@ -172,8 +173,6 @@ class BO:
                               performance=self.best_performance,
                               train_score=train_accuracy,
                               test_score=test_accuracy)
-
-
 
         # Log best, average, and median objective values in the final sample set
         self.logger.log_generation(generations, self.config.pop_size + generations * self.num_top_cand,

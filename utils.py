@@ -17,7 +17,8 @@ def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_t
 
     return train_accuracy, test_accuracy
 
-def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, index: int) -> Tuple[float, int]:
+
+def ray_eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, index: int) -> Tuple[float, int]:
     """
     Evaluates a given set of hyperparameters on cross-validated accuracy.
 
@@ -29,7 +30,6 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed) # initialize our cv splitter
     # Both model internals and data splits are reproducible
     model = RandomForestClassifier(**model_params, random_state=seed)
-
     try:
         score = cross_val_score(model, X_train, y_train, cv=cv, scoring='accuracy').mean()
     except Exception as e:
@@ -37,14 +37,8 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
         return 1.0, index  # Return a high score to avoid selecting this individual
     return -1.0 * score, index  # minimize
 
-def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
-    if model == 'RF':
-        # print("Final evaluations for RF") # debug
-        return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
-    else:
-        raise ValueError(f"Unsupported model: {model}")
 
-def bo_eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, n_jobs: int) -> float:
+def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, n_jobs: int) -> float:
     """
     Evaluates a given set of hyperparameters on cross-validated accuracy.
 
@@ -56,16 +50,32 @@ def bo_eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed) # initialize our cv splitter
     # Both model internals and data splits are reproducible
     model = RandomForestClassifier(**model_params, random_state=seed, n_jobs=n_jobs)
-
     try:
         score = cross_val_score(model, X_train, y_train, cv=cv, scoring='accuracy').mean()
     except Exception as e:
         print(f"Error evaluating model parameters {model_params}: {e}")
         return 1.0  # Return a high score to avoid selecting this individual
-    return -1.0 * score  # minimize
+    return -1.0 * score  # minimizes
+
+
+def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
+    if model == 'RF':
+        # print("Final evaluations for RF") # debug
+        return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
+    else:
+        raise ValueError(f"Unsupported model: {model}")
+
+
+def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
+                    seed: int, n_jobs: int) -> float:
+    if model == 'RF':
+        return eval_parameters_RF(model_params, X_train, y_train, seed, n_jobs)
+    else:
+        raise ValueError(f"Unsupported model: {model}")
+
 
 @ray.remote
-def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
+def ray_eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
                  seed: int, index: int) -> Tuple[float, int]:
     """
     Computes the performance score for the given set of hyperparameters under the specified model type.
@@ -82,9 +92,10 @@ def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
     """
     if model == 'RF':
         # print("Evaluation for RF.") # debug
-        return eval_parameters_RF(model_params, X_train, y_train, seed, index)
+        return ray_eval_parameters_RF(model_params, X_train, y_train, seed, index)
     else:
         raise ValueError(f"Unsupported model: {model}")
+
 
 def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     if model == 'RF':
@@ -94,6 +105,7 @@ def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     #     return XGBoostParams(seed)
     else:
         raise ValueError(f"Unsupported model: {model}")
+
 
 #https://github.com/automl/ASKL2.0_experiments/blob/84a9c0b3af8f7ac6e2a003d4dea5e6dce97d4315/experiment_scripts/utils.py
 def load_task(task_id: int, data_dir: str, preprocess=True):

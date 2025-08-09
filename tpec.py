@@ -9,7 +9,7 @@ from ea import EA
 from tpe import TPE
 from individual import Individual
 from param_space import ModelParams
-from utils import eval_factory, eval_final_factory
+from utils import ray_eval_factory, eval_factory, eval_final_factory
 
 class TPEC:
     def __init__(self, config: Config, logger: Logger, param_space: ModelParams):
@@ -56,7 +56,7 @@ class TPEC:
 
         # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
         ray_evals: List[ObjectRef] = [ 
-            eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+            ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
             for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
         ]
         # Process results as they come in
@@ -77,28 +77,23 @@ class TPEC:
         # Append the filtered population to the archive of all evaluated individuals
         self.evaluated_individuals += self.population
         assert(len(self.evaluated_individuals) == len(self.population))
+        
+        # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
+        for ind in self.evaluated_individuals:
+            params = ind.get_params()
+            for name in params:
+                if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
+                    params[name] = 1.0e-16
+                if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
+                    params[name] = 0
 
         generations = (self.config.evaluations // self.config.pop_size) - 1
         for gen in range(generations):
             # Log population performance
             self.logger.log_generation(gen, self.config.pop_size * (gen + 1), self.population, "TPEC")
 
-            # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to ~0
-            for ind in self.evaluated_individuals:
-                params = ind.get_params()
-                for name in params:
-                    if self.param_space.param_space[name]['type'] in ['int', 'float'] and params[name] is None:
-                        params[name] = .0001
-                # TODO: technically not needed? Since ind.get_params() returns by reference. If this is not the case,
-                # we'll know because the surrogate can't be fit. 
-                # ind.set_params(params)
-
             # Fit TPE to the archive of all observed individuals 
-            self.tpe.fit(self.evaluated_individuals, self.param_space)
-
-            # Fix the archive again to align with scikit-learn requirements
-            for ind in self.evaluated_individuals:
-                self.param_space.fix_parameters(ind.get_params()) # this works because references, can confirm by printing
+            self.tpe.fit(self.evaluated_individuals, self.param_space, self.config.rng)
 
             # To store the next population
             new_pop = []
@@ -107,55 +102,72 @@ class TPEC:
             ei_all_parents: List[float] = [] 
 
             # Select enough parents to cover the entire population using tournament selection
-            # These should already be fixed
             performances = np.array([ind.get_performance() for ind in self.population]) # from the current population
             parents = [self.ea.tournament_selection(self.population, performances) for _ in range(self.config.pop_size)]
             assert(len(parents) == self.config.pop_size)
 
             # Each parent produces 'num_candidates' candidate offsprings (10 by default)
             for parent in parents:
-                # Deep copy parent parameters separately, then safely plug into a new Individual object
+                # Deep copy parent parameters separately to prevent offspring from being pre-evaluated
                 candidate_params = [copy.deepcopy(parent.get_params()) for _ in range(self.config.num_candidates)]
                 for child_param in candidate_params:
-                    # Mutations occur in place, should also include fixing
+                    # Mutations occur in place, includes fixing
                     self.param_space.mutate_parameters(child_param, self.config.mut_rate)
                     # Can't use TPE's suggest() on candidates if numeric parameters have value "None" (e.g. max_samples)
                     for name in child_param:
-                        if self.param_space.param_space[name]['type'] in ['int', 'float'] and child_param[name] is None:
-                            child_param[name] = .0001
+                        if self.param_space.param_space[name]['type'] in ['float'] and child_param[name] is None:
+                                                    child_param[name] = 1.0e-16
+                        if self.param_space.param_space[name]['type'] in ['int'] and child_param[name] is None:
+                                                    child_param[name] = 0
                 
                 candidates = [Individual(param) for param in candidate_params]
+                assert len(candidates) == self.config.num_candidates
 
                 # Evaluate each candidate's expected improvement score, suggest one
                 best_candidate, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1) 
                 if self.config.debug: self.soft_eval_count += se_count
                 assert len(best_candidate) == 1
 
-                # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
+                # Make sure chosen candidate align with scikit-learn's requirements before evaluation
+                # The system allows 'best_candidate' to contain more than one Individual (num_top_cand >= 1),
                 for ind in best_candidate: # 'best_candidate' should contain a single Individual
                     self.param_space.fix_parameters(ind.get_params()) # fixes in-place
-                
-                # Evaluate best candidate(s) on the true objective.
-                # The system allows 'best_candidate' to contain more than one Individual (num_top_cand >= 1),
-                # but in TPEC, this is always set to 1. 
-                ray_child_evals: List[ObjectRef] = [
-                    eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                    for i, ind in enumerate(best_candidate) # should be 1 ind, by default
-                ]
-                while len(ray_child_evals) > 0:
-                    done, ray_child_evals = ray.wait(ray_child_evals, num_returns = 1)
-                    performance, index = ray.get(done)[0]
-                    best_candidate[index].set_performance(performance)
-                    if self.config.debug: self.hard_eval_count += 1
+
+                # # Evaluate best candidate on the true objective.
+                # for ind in best_candidate:
+                #     ind.set_performance(eval_factory("RF",
+                #                                         ind.get_params(),
+                #                                         X_train,
+                #                                         y_train,
+                #                                         self.config.seed,
+                #                                         self.config.num_cpus))
+                #     self.hard_eval_count += 1
 
                 # Append to new population
                 new_pop += best_candidate # a bit sloppy, but works
                 ei_all_parents += best_ei_scores.tolist() # this should be one score
 
-            # Update population  
+            # Update population 
             self.population = new_pop
 
+            # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
+            ray_evals: List[ObjectRef] = [ 
+                ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
+                for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
+            ]
+            # Process results as they come in
+            while len(ray_evals) > 0:
+                done, ray_evals = ray.wait(ray_evals, num_returns = 1)
+                # Extract the only result (Tuple[float, int]) from the 'done' list
+                performance, index = ray.get(done)[0] 
+                self.population[index].set_performance(performance)
+                if self.config.debug: self.hard_eval_count += 1
+                self.population = new_pop
+
+            
+            # remove individuals with positive performance
             self.remove_failed_individuals()
+            # Update best performance and set of best performers
             self.process_population_for_best()
             print(f"Population size at gen {gen}: {len(self.population)}")
             print(f"Best training performance so far: {self.best_performance}")
@@ -164,12 +176,24 @@ class TPEC:
             assert(len(ei_all_parents) == self.config.pop_size) 
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)
 
+            # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
+            for ind in self.population:
+                params = ind.get_params()
+                for name in params:
+                    if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
+                        params[name] = 1.0e-16
+                    if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
+                        params[name] = 0
+
             # Append current population to archive of evaluated individuals 
             self.evaluated_individuals += self.population
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
+
+        # revert samples for best_ind
+        self.param_space.fix_parameters(best_ind_params)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
