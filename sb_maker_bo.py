@@ -1,11 +1,11 @@
 """
-File to generate SLURM script
+File to generate SLURM script for BO 
 """
-# clear; python sb_maker.py > runner.sb
+# clear; python sb_maker_bo.py > runner_bo.sb
 
 import pandas as pd
 
-def print_header(array_max, nodes = 1, ntasks = 1, cpus = 12):
+def print_header(array_max, nodes = 1, ntasks = 1, cpus = 2):
     # header prints
     print("#!/bin/bash")
     print("########## Define Resources Needed with SBATCH Lines ##########")
@@ -32,10 +32,10 @@ if __name__ == "__main__":
     task_num = len(task_ids)
     evals = 1000
     replicates = 20
-    methods = ['EA', 'TPEC']
-    total_jobs = replicates * len(methods) * task_num
+    method = 'TPEBO'
+    total_jobs = replicates * task_num
 
-    num_cpus = 12
+    num_cpus = 2
 
     print_header(array_max=total_jobs, cpus = num_cpus)
 
@@ -51,9 +51,7 @@ if __name__ == "__main__":
     print('# Treatments')
     print('##################################\n')
 
-    print("METHODS=(", end="")
-    print(" ".join(str(name) for name in methods), end="") # space-separated method names 
-    print(")")
+    print(f"METHOD={method}")
 
     print("DATASETS=(", end="")
     print(" ".join(str(id) for id in task_ids), end="")  
@@ -62,18 +60,10 @@ if __name__ == "__main__":
     # slurm array starts at 1, bash array starts at 0
     print("ID=$((SLURM_ARRAY_TASK_ID - 1))")
 
-    print(f"METHOD_ID=$((ID / ({replicates} * {task_num})))")
-    print(f"DATASET_ID=$(( (ID % ({replicates} * {task_num})) / {replicates} ))")
+    print(f"DATASET_ID=$(( ID / {replicates} ))")
     print(f"REPLICATE=$((ID % {replicates}))\n")
 
     print("DATASET=${DATASETS[$DATASET_ID]}")
-    print("METHOD=${METHODS[$METHOD_ID]} \n")
-    # print("if [[ \"$METHOD\" == \"TPEBO\" ]]; then ")
-    # print(f"    CPUS={num_cpus_bo}")
-    # print("else")
-    # print(f"    CPUS={num_cpus}")
-    # print("fi")
-
 
     print("echo \"Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}\"\n")
 
