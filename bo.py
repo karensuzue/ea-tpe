@@ -96,8 +96,8 @@ class BO:
         self.remove_failed_individuals()
         # Update best performance and set of best performers in the current sample set
         self.process_samples_for_best()
-        print(f"Initial sample size: {len(self.samples)}")
-        print(f"Best training performance so far: {self.best_performance}")
+        print(f"Initial sample size: {len(self.samples)}", flush=True)
+        print(f"Best training performance so far: {self.best_performance}", flush=True)
 
         # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
         for ind in self.samples:
@@ -156,8 +156,8 @@ class BO:
             self.remove_failed_individuals()
             # Update best performance and set of best performers
             self.process_samples_for_best()
-            print(f"Samples size at gen {gen}: {len(self.samples)}")
-            print(f"Best training performance so far: {self.best_performance}")
+            print(f"Samples size at gen {gen}: {len(self.samples)}", flush=True)
+            print(f"Best training performance so far: {self.best_performance}", flush=True)
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
@@ -182,8 +182,8 @@ class BO:
         self.logger.save(self.config, f"{self.surrogate_type}BO")
 
         if self.config.debug:
-            print(f"Hard evaluations: {self.hard_eval_count}")
-            print(f"Soft evaluations {self.soft_eval_count}")
+            print(f"Hard evaluations: {self.hard_eval_count}", flush=True)
+            print(f"Soft evaluations {self.soft_eval_count}", flush=True)
             assert(len(self.samples) == self.config.evaluations)
 
         ray.shutdown()
@@ -198,7 +198,7 @@ class BO:
         """
         self.samples = [ind for ind in self.samples if ind.get_performance() <= 0.0]
         if self.config.debug:
-            print(f"Removed individuals with positive performance, new population size: {len(self.samples)}")
+            print(f"Removed individuals with positive performance, new population size: {len(self.samples)}", flush=True)
         return
 
     # return the best training performance from the population
