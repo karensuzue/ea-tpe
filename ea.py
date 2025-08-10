@@ -119,8 +119,8 @@ class EA:
         # Remove individuals with positive performance
         self.remove_failed_individuals()
         self.process_population_for_best()
-        print(f"Initial population size: {len(self.population)}")
-        print(f"Best training performance so far: {self.best_performance}")
+        print(f"Initial population size: {len(self.population)}", flush=True)
+        print(f"Best training performance so far: {self.best_performance}", flush=True)
 
         # Start evolution
         generations = (self.config.evaluations // self.config.pop_size) - 1
@@ -145,8 +145,8 @@ class EA:
             # remove individuals with positive performance
             self.remove_failed_individuals()
             self.process_population_for_best()
-            print(f"Population size at gen {gen}: {len(self.population)}")
-            print(f"Best training performance so far: {self.best_performance}")
+            print(f"Population size at gen {gen}: {len(self.population)}", flush=True)
+            print(f"Best training performance so far: {self.best_performance}", flush=True)
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
@@ -165,7 +165,7 @@ class EA:
         self.logger.save(self.config, "EA")
 
         if self.config.debug:
-            print(f"Hard evaluations: {self.hard_eval_count}")
+            print(f"Hard evaluations: {self.hard_eval_count}", flush=True)
 
         ray.shutdown()
 
@@ -178,7 +178,7 @@ class EA:
         """
         self.population = [ind for ind in self.population if ind.get_performance() <= 0.0]
         if self.config.debug:
-            print(f"Removed individuals with positive performance, new population size: {len(self.population)}")
+            print(f"Removed individuals with positive performance, new population size: {len(self.population)}", flush=True)
         return
 
     # return the best training performance from the population

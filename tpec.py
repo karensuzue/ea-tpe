@@ -67,8 +67,8 @@ class TPEC:
         self.remove_failed_individuals()
         # Update best performance and set of best performers
         self.process_population_for_best()
-        print(f"Initial population size: {len(self.population)}")
-        print(f"Best training performance so far: {self.best_performance}")
+        print(f"Initial population size: {len(self.population)}", flush=True)
+        print(f"Best training performance so far: {self.best_performance}", flush=True)
 
         # Append the filtered population to the archive of all evaluated individuals
         self.evaluated_individuals += self.population
@@ -156,8 +156,8 @@ class TPEC:
             self.remove_failed_individuals()
             # Update best performance and set of best performers
             self.process_population_for_best()
-            print(f"Population size at gen {gen}: {len(self.population)}")
-            print(f"Best training performance so far: {self.best_performance}")
+            print(f"Population size at gen {gen}: {len(self.population)}", flush=True)
+            print(f"Best training performance so far: {self.best_performance}", flush=True)
 
             # Log per-iteration expected improvement statistics
             assert(len(ei_all_parents) == self.config.pop_size)
@@ -195,8 +195,8 @@ class TPEC:
         self.logger.save(self.config, "TPEC")
 
         if self.config.debug:
-            print(f"Hard evaluations: {self.hard_eval_count}")
-            print(f"Soft evaluations {self.soft_eval_count}")
+            print(f"Hard evaluations: {self.hard_eval_count}", flush=True)
+            print(f"Soft evaluations {self.soft_eval_count}", flush=True)
 
         ray.shutdown()
 
@@ -209,7 +209,7 @@ class TPEC:
         """
         self.population = [ind for ind in self.population if ind.get_performance() <= 0.0]
         if self.config.debug:
-            print(f"Removed individuals with positive performance, new population size: {len(self.population)}")
+            print(f"Removed individuals with positive performance, new population size: {len(self.population)}", flush=True)
         return
 
     # return the best training performance from the population
