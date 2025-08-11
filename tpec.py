@@ -77,12 +77,16 @@ class TPEC:
         # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
         for ind in self.evaluated_individuals:
             params = ind.get_params()
+            if params['bootstrap'] == True and params['max_samples'] == None: # should not happen
+                  raise ValueError("bootstrap=True, max_samples=None encountered in archive.")
+            if params['bootstrap'] == True and params['max_samples_og'] == None: # should not happen
+                  raise ValueError("bootstrap=True, max_samples_og=None encountered in archive.")
             for name in params:
                 if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
                     params[name] = 1.0e-16
                 if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
                     params[name] = 0
-
+                
         generations = (self.config.evaluations // self.config.pop_size) - 1
         for gen in range(generations):
             # Log population performance
@@ -166,6 +170,10 @@ class TPEC:
             # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
             for ind in self.population:
                 params = ind.get_params()
+                if params['bootstrap'] == True and params['max_samples'] == None:
+                  raise ValueError("bootstrap=True, max_samples=None encountered in population.")
+                if params['bootstrap'] == True and params['max_samples_og'] == None:
+                  raise ValueError(f"bootstrap=True, max_samples_og=None, max_samples={params['max_samples']} encountered in population.")
                 for name in params:
                     if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
                         params[name] = 1.0e-16
@@ -200,6 +208,7 @@ class TPEC:
 
         ray.shutdown()
 
+    # Todo: move to utils, take in a population/list of inds
     # remove any individuals wiht a positive performance
     def remove_failed_individuals(self) -> None:
         """

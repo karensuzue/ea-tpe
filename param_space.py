@@ -130,6 +130,9 @@ class RandomForestParams(ModelParams):
             'max_leaf_nodes': {'bounds': (2, 1000), 'type': 'int'}, # int
             'bootstrap': {'bounds': (True, False), 'type': 'bool'},  # boolean
             'max_samples': {'bounds': (.001, 1.0 - offset), 'type': 'float'},  # float
+
+            # a copy of 'max_samples' that is unaffected/not used by surrogate model
+            'max_samples_og': {'bounds': (.001, 1.0 - offset), 'type': 'special-float'} 
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
@@ -148,8 +151,13 @@ class RandomForestParams(ModelParams):
                 if spec["type"] == "int":
                     model_params[name] = self.shift_int_parameter(int(model_params[name]), spec['bounds'][0], spec['bounds'][1])
                 elif spec["type"] == "float":
-                    if name == "max_samples" and model_params[name] is None:
-                        continue
+                    if name == "max_samples":
+                        # if model_params['bootstrap'] is False: model_params[name] = None
+                        # elif model_params['bootstrap'] is True and model_params['max_samples_og'] is None:
+                        #     model_params[name] = new random num
+                        # elif model_params['bootstrap'] is True and model_params['max_samples_og'] is not None:
+                        #     assert(model_params['max_samples_og'] == model_params[name])
+                        #     self.shift_float_parameter()
                     else:
                         model_params[name] = self.shift_float_parameter(float(model_params[name]), spec['bounds'][0], spec['bounds'][1])
                 elif spec["type"] in ["cat", "bool"]:
@@ -176,6 +184,8 @@ class RandomForestParams(ModelParams):
                 rand_genotype[param_name] = float(self.rng.uniform(*spec["bounds"]))
             elif spec["type"] in {"cat", "bool"}:
                 rand_genotype[param_name] = self.rng.choice(spec["bounds"])
+            elif param_name == "max_samples_og": # don't generate new values for this
+                rand_genotype[param_name] = rand_genotype["max_samples"]
             else:
                 raise ValueError(f"Unsupported parameter type: {spec['type']}")
         # Fix the parameters to ensure they are valid
@@ -189,7 +199,7 @@ class RandomForestParams(ModelParams):
 
     def get_params_by_type(self, type: str) -> Dict:
         """ Retrieves a subset of parameters of a given type. """
-        if type not in ['int', 'float', 'cat', 'bool']:
+        if type not in ['int', 'float', 'cat', 'bool', 'special-float']:
             raise ValueError(f"Unsupported parameter type: {type}")
         return {name: info for name, info in self.param_space.items() if info['type'] == type}
 
@@ -199,6 +209,17 @@ class RandomForestParams(ModelParams):
         # if bootstrap is False, we need to set max_samples to None
         if not model_params['bootstrap']:
             model_params['max_samples'] = None
+            model_params['max_samples_og'] = None
         if model_params['bootstrap'] and model_params['max_samples'] is None:
             model_params['max_samples'] = float(self.rng.uniform(*self.param_space['max_samples']['bounds']))
+            model_params['max_samples_og'] = model_params['max_samples']
         return
+    
+    def tpe_parameters(self) -> Dict[str, Any]:
+        # return deepcopy of parameters with modification for TPE fits
+        # assert if bootstrap is true, max_samples can't be none
+            # additional bounds checking?
+        # assert if bootstrap is false, max-sample has to be none 
+
+
+        

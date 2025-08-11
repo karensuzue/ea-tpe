@@ -61,7 +61,9 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
 def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     if model == 'RF':
         # print("Final evaluations for RF") # debug
-        return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
+        # copy without "max_samples_og"
+        model_params_modified = {k : v for k, v in model_params.items() if k != 'max_samples_og'}
+        return eval_parameters_RF_final(model_params_modified, X_train, y_train, X_test, y_test, seed)
     else:
         raise ValueError(f"Unsupported model: {model}")
 
@@ -69,7 +71,9 @@ def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_trai
 def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
                     seed: int, n_jobs: int) -> float:
     if model == 'RF':
-        return eval_parameters_RF(model_params, X_train, y_train, seed, n_jobs)
+        # copy without "max_samples_og"
+        model_params_modified = {k : v for k, v in model_params.items() if k != 'max_samples_og'}
+        return eval_parameters_RF(model_params_modified, X_train, y_train, seed, n_jobs)
     else:
         raise ValueError(f"Unsupported model: {model}")
 
@@ -92,7 +96,9 @@ def ray_eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
     """
     if model == 'RF':
         # print("Evaluation for RF.") # debug
-        return ray_eval_parameters_RF(model_params, X_train, y_train, seed, index)
+        # copy without "max_samples_og"
+        model_params_modified = {k : v for k, v in model_params.items() if k != 'max_samples_og'}
+        return ray_eval_parameters_RF(model_params_modified, X_train, y_train, seed, index)
     else:
         raise ValueError(f"Unsupported model: {model}")
 
