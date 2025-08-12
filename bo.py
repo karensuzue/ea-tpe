@@ -9,8 +9,8 @@ from individual import Individual
 from surrogate import Surrogate
 from tpe import TPE
 from typeguard import typechecked
-from typing import Tuple, Dict, List, Literal
-from utils import ray_eval_factory, eval_factory, eval_final_factory
+from typing import Dict, List, Literal
+from utils import ray_eval_factory, eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
 
 @typechecked
 class BO:
@@ -92,21 +92,18 @@ class BO:
             self.samples[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
-        # Remove individuals with positive performance
-        self.remove_failed_individuals()
+        # Remove individuals with positive performance in sample set 
+        self.samples = remove_failed_individuals(self.samples, self.config)
         # Update best performance and set of best performers in the current sample set
-        self.process_samples_for_best()
+        self.best_performance, self.best_performers = process_population_for_best(self.samples, self.best_performance, self.best_performers)
         print(f"Initial sample size: {len(self.samples)}", flush=True)
         print(f"Best training performance so far: {self.best_performance}", flush=True)
 
+        # Deep copy to retain evaluated performance
+        modified_samples: List[Individual] = [copy.deepcopy(ind) for ind in self.samples]
         # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
-        for ind in self.samples:
-            params = ind.get_params()
-            for name in params:
-                if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
-                    params[name] = 1.0e-16
-                if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
-                    params[name] = 0
+        for ind in modified_samples:
+            ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
@@ -115,7 +112,7 @@ class BO:
                                        self.samples, f"{self.surrogate_type}BO")
 
             # Fit the surrogate to the observed data
-            self.surrogate.fit(self.samples, self.param_space, self.config.rng)
+            self.surrogate.fit(modified_samples, self.param_space, self.config.rng)
 
             # Sample enough candidates from the surrogate to keep the number of 'soft' evaluations consistent between BO and TPEC
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space, self.config.rng)
@@ -139,32 +136,28 @@ class BO:
                                                     self.config.seed,
                                                     self.config.num_cpus))
                 self.hard_eval_count += 1
-
-            # must update best candidates for the surrogate
-            for ind in best_candidates:
-                params = ind.get_params()
-                for name in params:
-                    if self.param_space.param_space[name]['type'] in ['float'] and params[name] is None:
-                        params[name] = 1.0e-16
-                    if self.param_space.param_space[name]['type'] in ['int'] and params[name] is None:
-                        params[name] = 0
-
+                
+            # remove the best candidate individuals with positive performance
+            best_candidates = remove_failed_individuals(best_candidates, self.config)
             # Update sample set
             self.samples += best_candidates
-
-            # remove individuals with positive performance
-            self.remove_failed_individuals()
             # Update best performance and set of best performers
-            self.process_samples_for_best()
+            self.best_performance, self.best_performers = process_population_for_best(self.samples, self.best_performance, self.best_performers)
             print(f"Samples size at gen {gen}: {len(self.samples)}", flush=True)
             print(f"Best training performance so far: {self.best_performance}", flush=True)
+
+            # Update modified copy of sample set for fitting surrogate
+            modified_best_candidates: List[Individual] = [copy.deepcopy(ind) for ind in best_candidates]
+            for ind in modified_best_candidates:
+                ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
+            modified_samples += modified_best_candidates
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
 
         # revert samples for best_ind
-        self.param_space.fix_parameters(best_ind_params)
+        # self.param_space.fix_parameters(best_ind_params)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
@@ -187,45 +180,3 @@ class BO:
             assert(len(self.samples) == self.config.evaluations)
 
         ray.shutdown()
-
-
-    # remove any individuals wiht a positive performance
-    def remove_failed_individuals(self) -> None:
-        """
-        Removes individuals with a positive performance from the population.
-        This is useful for ensuring that only individuals with negative performance are considered.
-        A positive performance indicates that the individual failed during evaluation and is not suitable for selection.
-        """
-        self.samples = [ind for ind in self.samples if ind.get_performance() <= 0.0]
-        if self.config.debug:
-            print(f"Removed individuals with positive performance, new population size: {len(self.samples)}", flush=True)
-        return
-
-    # return the best training performance from the population
-    def get_best_performance(self) -> float:
-        """
-        Returns the best training performance from the population.
-        """
-        if not self.samples:
-            raise ValueError("Population is empty, cannot get best training performance.")
-        return min([ind.get_performance() for ind in self.samples])
-
-    # process the current sample set and update self.best_performers and self.best_performance
-    def process_samples_for_best(self) -> None:
-        """
-        Processes the current population and updates self.best_performers and self.best_performance.
-        """
-        current_best = self.get_best_performance()
-
-        # check if we have found a better performance
-        if current_best < self.best_performance:
-            self.best_performance = current_best
-            self.best_performers = []
-
-        # add all individuals with the current best performance to the best performers
-        for ind in self.samples:
-            if ind.get_performance() == self.best_performance:
-                self.best_performers.append(copy.deepcopy(ind.get_params()))
-
-        assert len(self.best_performers) > 0, "No best performers found in the population."
-        return

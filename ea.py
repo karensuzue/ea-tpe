@@ -8,7 +8,7 @@ from individual import Individual
 from param_space import ModelParams
 from typeguard import typechecked
 from typing import List, Tuple, Dict
-from utils import ray_eval_factory, eval_final_factory
+from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
 import copy as cp
 
 @typechecked
@@ -117,8 +117,8 @@ class EA:
             if self.config.debug: self.hard_eval_count += 1
 
         # Remove individuals with positive performance
-        self.remove_failed_individuals()
-        self.process_population_for_best()
+        self.population = remove_failed_individuals(self.population, self.config)
+        self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
         print(f"Initial population size: {len(self.population)}", flush=True)
         print(f"Best training performance so far: {self.best_performance}", flush=True)
 
@@ -143,8 +143,8 @@ class EA:
                 if self.config.debug: self.hard_eval_count += 1
 
             # remove individuals with positive performance
-            self.remove_failed_individuals()
-            self.process_population_for_best()
+            self.population = remove_failed_individuals(self.population, self.config)
+            self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
             print(f"Population size at gen {gen}: {len(self.population)}", flush=True)
             print(f"Best training performance so far: {self.best_performance}", flush=True)
 
@@ -169,43 +169,4 @@ class EA:
 
         ray.shutdown()
 
-    # remove any individuals wiht a positive performance
-    def remove_failed_individuals(self) -> None:
-        """
-        Removes individuals with a positive performance from the population.
-        This is useful for ensuring that only individuals with negative performance are considered.
-        A positive performance indicates that the individual failed during evaluation and is not suitable for selection.
-        """
-        self.population = [ind for ind in self.population if ind.get_performance() <= 0.0]
-        if self.config.debug:
-            print(f"Removed individuals with positive performance, new population size: {len(self.population)}", flush=True)
-        return
-
-    # return the best training performance from the population
-    def get_best_performance(self) -> float:
-        """
-        Returns the best training performance from the population.
-        """
-        if not self.population:
-            raise ValueError("Population is empty, cannot get best training performance.")
-        return min([ind.get_performance() for ind in self.population])
-
-    # process the current population and update self.best_performers and self.best_performance
-    def process_population_for_best(self) -> None:
-        """
-        Processes the current population and updates self.best_performers and self.best_performance.
-        """
-        current_best = self.get_best_performance()
-
-        # check if we have found a better performance
-        if current_best < self.best_performance:
-            self.best_performance = current_best
-            self.best_performers = []
-
-        # add all individuals with the current best performance to the best performers
-        for ind in self.population:
-            if ind.get_performance() == self.best_performance:
-                self.best_performers.append(cp.deepcopy(ind.get_params()))
-
-        assert len(self.best_performers) > 0, "No best performers found in the population."
-        return
+   

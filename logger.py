@@ -67,3 +67,23 @@ class Logger:
                 for gen, eval, avg_ei, max_ei, std_ei in self.ei_history:
                     f.write(f"{gen},{eval},{avg_ei},{max_ei},{std_ei}\n")
     
+    # Only call this after save()!
+    def save_tpe_params(self, config: Config, method: str) -> None:
+        """ For methods using TPE, save the modified parameters of the best Individual """
+        dataset = config.task_id
+        seed = config.seed
+        modified_best_ind_data = {
+            "dataset" = dataset,
+            "replicate": config.seed,
+            "evaluations": config.evaluations,
+            "method": method,
+            "cv_accuracy_score": self.best_ind.get_performance(),
+            "train_accuracy_score": self.best_ind.get_train_score(),
+            "test_accuracy_score": self.best_ind.get_test_score(),
+            "params": best_params
+        }
+        # Append to existing file
+        with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.json", "a") as f:
+            json.dump()
+
+    

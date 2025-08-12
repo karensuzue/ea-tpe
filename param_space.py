@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
+import copy
 import numpy as np
 from typeguard import typechecked
 from typing import Tuple, Dict, List, TypedDict, Any, Literal, Union
-
 
 # Defining custom type alias
 # I believe TypedDict maps the dictionary strings to these keys
@@ -115,6 +115,15 @@ class ModelParams(ABC):
         """ Evaluates a given set of hyperparameters against some metric. """
         pass
 
+    @abstractmethod
+    def tpe_parameters(self, model_params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Return a modified copy of 'model_params'.
+        This ensures parameters are adjusted for compatibility
+        with the TPE optimizer.
+        """
+        pass
+
 # create a RandomForest subclass that inherits from ModelParams
 class RandomForestParams(ModelParams):
     def __init__(self, rng: np.random.default_rng, offset: float = 1e-6):
@@ -202,3 +211,31 @@ class RandomForestParams(ModelParams):
         if model_params['bootstrap'] and model_params['max_samples'] is None:
             model_params['max_samples'] = float(self.rng.uniform(*self.param_space['max_samples']['bounds']))
         return
+    
+    def tpe_parameters(self, model_params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Returns a modified copy of 'model_params', which are parameters adjusted for compatibility
+        with the TPE optimizer. 
+        """
+        # If 'bootstrap' is True, 'max_samples' must have a numeric value within bounds
+        if model_params['bootstrap'] is True:
+            bounds = self.param_space['max_samples']['bounds']
+            assert(model_params['max_samples'] is not None 
+                   and bounds[0] <= model_params['max_samples'] <= bounds[1])
+            
+        # If 'bootstrap' is False, 'max_samples' must be None
+        elif model_params['bootstrap'] is False:
+            assert(model_params['max_samples'] is None)
+
+        model_params_copy = copy.deepcopy(model_params)
+                                          
+        # for name in model_params_copy:
+        #     if self.param_space[name]['type'] in ['float'] and model_params_copy[name] is None:
+        #             model_params_copy[name] = 1.0e-16
+        #     if self.param_space[name]['type'] in ['int'] and model_params_copy[name] is None:
+        #             model_params_copy[name] = 0
+
+        if model_params_copy['max_samples'] is None:
+            model_params_copy['max_samples'] = 1.0e-16
+
+        return model_params_copy

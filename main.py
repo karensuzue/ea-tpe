@@ -1,4 +1,5 @@
 import argparse
+import time
 import numpy as np
 from config import Config
 from logger import Logger
@@ -68,7 +69,9 @@ def main():
     else:
         raise ValueError(f"Unsupported method: {args.method}")
 
+    start_time = time.time()
     solver.run(X_train, y_train, X_test, y_test)
+    print(f"Elapsed time {(time.time() - start_time) / 3600:.4f} hours.")
 
 if __name__ == "__main__":
     main()

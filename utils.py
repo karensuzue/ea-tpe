@@ -5,8 +5,10 @@ import ray
 import numpy as np
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, List
 from param_space import RandomForestParams, ModelParams
+from individual import Individual
+from config import Config
 
 def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     model = RandomForestClassifier(**model_params, random_state = seed)
@@ -123,3 +125,44 @@ def load_task(task_id: int, data_dir: str, preprocess=True):
         exit(0)
 
     return X_train, y_train, X_test, y_test
+
+# remove any individuals wiht a positive performance
+def remove_failed_individuals(population: List[Individual], config: Config) -> List[Individual]:
+    """
+    Removes individuals with a positive performance from the population.
+    This is useful for ensuring that only individuals with negative performance are considered.
+    A positive performance indicates that the individual failed during evaluation and is not suitable for selection.
+    """
+    population = [ind for ind in population if ind.get_performance() <= 0.0]
+    if config.debug:
+        print(f"Removed individuals with positive performance, new population size: {len(population)}", flush=True)
+    return population
+
+# return the best training performance from the population
+def get_best_performance(population: List[Individual]) -> float:
+    """
+    Returns the best training performance from the population.
+    """
+    if not population:
+        raise ValueError("Population is empty, cannot get best training performance.")
+    return min([ind.get_performance() for ind in population])
+
+# process the current population and update self.best_performers and self.best_performance
+def process_population_for_best(population: List[Individual], best_performance: float, best_performers: List[Dict]) -> None:
+    """
+    Processes the current population and updates self.best_performers and self.best_performance.
+    """
+    current_best = get_best_performance(population)
+
+    # check if we have found a better performance
+    if current_best < best_performance:
+        best_performance = current_best 
+        best_performers = []
+
+    # add all individuals with the current best performance to the best performers
+    for ind in population:
+        if ind.get_performance() == best_performance:
+            best_performers.append(copy.deepcopy(ind.get_params()))
+
+    assert len(best_performers) > 0, "No best performers found in the population."
+    return best_performance, best_performers
