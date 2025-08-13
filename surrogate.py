@@ -20,7 +20,7 @@ class Surrogate(ABC):
         pass
 
     @abstractmethod
-    def suggest(self, param_space: ModelParams, candidates: List[Individual], num_top_cand: int) -> Tuple[List[Individual], np.ndarray, int]:
+    def suggest(self, param_space: ModelParams, candidates: List[Individual], num_top_cand: int) -> Tuple[List[Individual], np.ndarray, np.ndarray, int]:
         """
         Suggest the top candidate(s) after ranking them according to an acquisition score.
 
