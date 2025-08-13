@@ -64,12 +64,6 @@ if __name__ == "__main__":
 
     lines.append("DATASET=${DATASETS[$DATASET_ID]}")
     lines.append("METHOD=${METHODS[$METHOD_ID]} \n")
-    lines.append("if [[ \"$METHOD\" == \"TPEBO\" ]]; then ")
-    lines.append(f"    CPUS={num_cpus}")
-    lines.append("else")
-    lines.append(f"    CPUS={num_cpus}")
-    lines.append("fi")
-
 
     lines.append("echo \"Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}\"\n")
 

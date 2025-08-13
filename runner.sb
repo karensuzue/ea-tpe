@@ -32,11 +32,6 @@ REPLICATE=$((ID % 20))
 DATASET=${DATASETS[$DATASET_ID]}
 METHOD=${METHODS[$METHOD_ID]} 
 
-if [[ "$METHOD" == "TPEBO" ]]; then 
-    CPUS=12
-else
-    CPUS=12
-fi
 echo "Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}"
 
 python main.py \
