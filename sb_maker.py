@@ -5,89 +5,83 @@ File to generate SLURM script
 
 import pandas as pd
 
-def print_header(array_max, nodes = 1, ntasks = 1, cpus = 12):
-    # header prints
-    print("#!/bin/bash")
-    print("########## Define Resources Needed with SBATCH Lines ##########")
-    print(f"#SBATCH --nodes={nodes}")
-    print(f"#SBATCH --ntasks={ntasks}")
-    print(f"#SBATCH --array=1-{array_max}")
-    print(f"#SBATCH --cpus-per-task={cpus}")
-    print("#SBATCH -t 24:00:00")
-    print("#SBATCH --mem=100GB")
-    print("#SBATCH --job-name=tpec_rf")
-    print("#SBATCH -p defq")
-    print("#SBATCH --exclude=esplhpc-cp040")
-    print("###############################################################\n")
+def make_header(array_max, nodes = 1, ntasks = 1, cpus = 12):
+    lines = [
+        "#!/bin/bash",
+        "########## Define Resources Needed with SBATCH Lines ##########",
+        f"#SBATCH --nodes={nodes}",
+        f"#SBATCH --ntasks={ntasks}",
+        f"#SBATCH --array=1-{array_max}",
+        f"#SBATCH --cpus-per-task={cpus}",
+        "#SBATCH -t 24:00:00",
+        "#SBATCH --mem=100GB",
+        "#SBATCH --job-name=tpe",
+        "#SBATCH -p defq",
+        "#SBATCH --exclude=esplhpc-cp040",
+        "###############################################################\n"
+    ]
+
+    return lines
 
 
 if __name__ == "__main__":
     # Retrieve names of the hardest OpenML tasks (less than 80% accuracy on test set)
-    # df = pd.read_csv('/common/suzuek/ea-tpe/data/agg_test.csv')
-    df = pd.read_csv('C:/Users/dinne/Documents/GitHub/ea-tpe/data/agg_test.csv')
-    df_hard = df[df['avg_test_score'] < 0.8] 
+    df = pd.read_csv('./data/agg_test.csv')
+    df_hard = df[df['avg_test_score'] < 0.8]
     task_ids = df_hard['task_id'].tolist()
 
     # For a total of 45*task_num jobs
     task_num = len(task_ids)
     evals = 1000
     replicates = 20
-    methods = ['EA', 'TPEC']
+    methods = ['EA', 'TPEBO', 'TPEC']
     total_jobs = replicates * len(methods) * task_num
 
     num_cpus = 12
 
-    print_header(array_max=total_jobs, cpus = num_cpus)
+    lines = make_header(array_max=total_jobs, cpus = num_cpus)
 
-    print("# todo: load conda environment")
-    print("source /common/suzuek/miniconda3/etc/profile.d/conda.sh")
-    print("conda activate tpe-ea\n")
+    lines.append("source ~/anaconda3/etc/profile.d/conda.sh")
+    lines.append("conda activate tpe-ea\n")
 
-    print("# todo: define the output and data directory")
-    print('DATA_DIR=/common/suzuek/ea-tpe/data/')
-    print("RESULTS_DIR=/common/suzuek/ea-tpe/results\n")
+    lines.append('DATA_DIR=/home/hernandezj45/Repos/ea-tpe/data/')
+    lines.append("RESULTS_DIR=/home/hernandezj45/Repos/ea-tpe/results\n")
 
-    print('##################################')
-    print('# Treatments')
-    print('##################################\n')
+    lines.append('##################################')
+    lines.append('# Treatments')
+    lines.append('##################################\n')
 
-    print("METHODS=(", end="")
-    print(" ".join(str(name) for name in methods), end="") # space-separated method names 
-    print(")")
+    lines.append("METHODS=(" + " ".join(str(name) for name in methods) + ")")
 
-    print("DATASETS=(", end="")
-    print(" ".join(str(id) for id in task_ids), end="")  
-    print(")\n")
+    lines.append("DATASETS=(" + " ".join(str(id) for id in task_ids) + ")\n")
 
     # slurm array starts at 1, bash array starts at 0
-    print("ID=$((SLURM_ARRAY_TASK_ID - 1))")
+    lines.append("ID=$((SLURM_ARRAY_TASK_ID - 1))")
 
-    print(f"METHOD_ID=$((ID / ({replicates} * {task_num})))")
-    print(f"DATASET_ID=$(( (ID % ({replicates} * {task_num})) / {replicates} ))")
-    print(f"REPLICATE=$((ID % {replicates}))\n")
+    lines.append(f"METHOD_ID=$((ID / ({replicates} * {task_num})))")
+    lines.append(f"DATASET_ID=$(( (ID % ({replicates} * {task_num})) / {replicates} ))")
+    lines.append(f"REPLICATE=$((ID % {replicates}))\n")
 
-    print("DATASET=${DATASETS[$DATASET_ID]}")
-    print("METHOD=${METHODS[$METHOD_ID]} \n")
-    # print("if [[ \"$METHOD\" == \"TPEBO\" ]]; then ")
-    # print(f"    CPUS={num_cpus_bo}")
-    # print("else")
-    # print(f"    CPUS={num_cpus}")
-    # print("fi")
-
-
-    print("echo \"Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}\"\n")
-
-    print("python main.py \\")
-    print("    --method ${METHOD} \\")
-    print("    --task_id ${DATASET} \\")
-    print("    --seed ${REPLICATE} \\")
-    print(f"    --evaluations {evals} \\")
-    print(f"    --num_cpus {num_cpus} \\")
-    print("    --debug True \\")
-    print("    --logdir ${RESULTS_DIR}")
+    lines.append("DATASET=${DATASETS[$DATASET_ID]}")
+    lines.append("METHOD=${METHODS[$METHOD_ID]} \n")
+    lines.append("if [[ \"$METHOD\" == \"TPEBO\" ]]; then ")
+    lines.append(f"    CPUS={num_cpus}")
+    lines.append("else")
+    lines.append(f"    CPUS={num_cpus}")
+    lines.append("fi")
 
 
+    lines.append("echo \"Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}\"\n")
 
+    lines.append("python main.py \\")
+    lines.append("    --method ${METHOD} \\")
+    lines.append("    --task_id ${DATASET} \\")
+    lines.append("    --seed ${REPLICATE} \\")
+    lines.append(f"    --evaluations {evals} \\")
+    lines.append(f"    --num_cpus {num_cpus} \\")
+    lines.append("    --debug True \\")
+    lines.append("    --logdir ${RESULTS_DIR}")
 
-
-
+    with open('runner.sb', "w") as f:
+        for line in lines:
+            f.write(line + "\n")
