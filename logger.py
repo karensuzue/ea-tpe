@@ -43,7 +43,7 @@ class Logger:
             "params": best_params
         }
 
-    def log_ei(self, generation: int, evaluation: int, ei_scores: np.ndarray):
+    def log_ei(self, generation: int, evaluation: int, ei_scores: List[float]) -> None:
         avg_ei = np.mean(ei_scores)
         max_ei = np.max(ei_scores)
         std_ei = np.std(ei_scores)
