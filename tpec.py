@@ -9,7 +9,7 @@ from ea import EA
 from tpe import TPE
 from individual import Individual
 from param_space import ModelParams
-from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best, get_best_performance
+from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
 
 class TPEC:
     def __init__(self, config: Config, logger: Logger, param_space: ModelParams):
@@ -18,10 +18,9 @@ class TPEC:
         self.param_space = param_space
 
         self.ea = EA(config, logger, param_space)
-        self.tpe = TPE(self.config.rng) # default gamma (splitting threshold)
+        self.tpe = TPE() # default gamma (splitting threshold)
 
         self.population: List[Individual] = []
-        self.evaluated_individuals: List[Individual] = [] # archive of every individual evaluated so far
 
         # to keep current best Individuals
         self.best_performance = 1.0
@@ -70,17 +69,14 @@ class TPEC:
         print(f"Initial population size: {len(self.population)}", flush=True)
         print(f"Best training performance so far: {self.best_performance}", flush=True)
 
-        # Append the filtered population to the archive of all evaluated individuals
-        self.evaluated_individuals += self.population
-        assert(len(self.evaluated_individuals) == len(self.population))
-
         # TPE cannot be fitted over numeric parameters with the value "None" (e.g., max_samples),
         # so we create a deep copy of the original archive and assign such parameters a value close to 0.
         # A deep copy is required to preserve the performance of the original individuals,
         # which is necessary for fitting a TPE over the parameter space.
-        modified_archive: List[Individual] = [copy.deepcopy(ind) for ind in self.evaluated_individuals]
-        for ind in modified_archive:
+        tpe_archive: List[Individual] = [copy.deepcopy(ind) for ind in self.population]
+        for ind in tpe_archive:
             ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
+        assert(len(tpe_archive) == len(self.population))
 
         generations = (self.config.evaluations // self.config.pop_size) - 1
         for gen in range(generations):
@@ -88,15 +84,11 @@ class TPEC:
             self.logger.log_generation(gen, self.config.pop_size * (gen + 1), self.population, "TPEC")
 
             # Fit TPE to the modified archive of all observed individuals
-            self.tpe.fit(modified_archive, self.param_space, self.config.rng)
-
-            # NOTE: Needs to retain performance, so can't use the following line, which creates unevaluated Individuals
-            # self.tpe.fit([Individual(self.param_space.tpe_parameters(ind.get_params())) for ind in self.evaluated_individuals],
-                          # self.param_space, self.config.rng)
+            self.tpe.fit(tpe_archive, self.param_space, self.config.rng)
 
             # To store the next population
             new_pop = []
-            
+
             # List containing the expected improvement scores of the chosen offspring (1 per parent),
             # or essentially, members of the new population
             ei_all_parents: List[float] = []
@@ -126,7 +118,7 @@ class TPEC:
                 assert len(best_index) == 1
 
                 # Append to new population
-                new_pop += [Individual(candidate_params[i]) for i in best_index] # a bit sloppy, but works
+                new_pop += [Individual(candidate_params[i]) for i in best_index]
                 ei_all_parents += best_ei_scores.tolist() # this should be one score
 
             # Update population
@@ -158,16 +150,15 @@ class TPEC:
             assert(len(ei_all_parents) == self.config.pop_size)
             self.logger.log_ei(gen, self.config.pop_size * (gen + 1), ei_all_parents)
 
-            # Append filtered population to archive of evaluated individuals
-            self.evaluated_individuals += self.population
-
             # Append modified copy of population to the modified archive
-            modified_population: List[Individual] = [copy.deepcopy(ind) for ind in self.population]
-            for ind in modified_population:
+            tpe_population: List[Individual] = [copy.deepcopy(ind) for ind in self.population]
+            for ind in tpe_population:
                 ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
-            modified_archive += modified_population
-            assert(len(self.evaluated_individuals) == len(modified_archive))
-            
+            tpe_archive += tpe_population
+
+            assert((gen + 2) * self.config.pop_size == len(tpe_archive),
+                   f'Expected { (gen + 2) * self.config.pop_size } individuals in TPE archive, but found { len(tpe_archive) }.')
+
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
@@ -192,4 +183,3 @@ class TPEC:
             print(f"Soft evaluations {self.soft_eval_count}", flush=True)
 
         ray.shutdown()
-
