@@ -128,7 +128,7 @@ class BO:
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
             # NOTE: Personally, I think this approach is reasonable, 
-            # as "candidates" in BO don't have "fixed" counterparts. 
+            # as "candidates" in BO don't have "fixed" counterparts prior to this step. 
             # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
             for ind in best_candidates: # 'best_candidates' may contain more than 1 Individual
                 self.param_space.fix_parameters(ind.get_params()) # fixes in-place
