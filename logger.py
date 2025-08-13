@@ -21,7 +21,7 @@ class Logger:
         std = np.std([o.get_performance() for o in population])
         self.history.append((generation, evaluation, best.get_performance(), avg, median, std))
         print(f"[LOG] Evaluation {evaluation} / Generation {generation}: {len(population)} individuals")
-    
+
     def log_best(self, best_ind: Individual, config: Config, method: str) -> None:
         """ Records the best hyperparameter in the current population. """
         self.best_ind = best_ind
@@ -42,7 +42,7 @@ class Logger:
             "test_accuracy_score": self.best_ind.get_test_score(),
             "params": best_params
         }
-    
+
     def log_ei(self, generation: int, evaluation: int, ei_scores: np.ndarray):
         avg_ei = np.mean(ei_scores)
         max_ei = np.max(ei_scores)
@@ -66,9 +66,9 @@ class Logger:
                 f.write("generation,evaluation,average,max,std\n")
                 for gen, eval, avg_ei, max_ei, std_ei in self.ei_history:
                     f.write(f"{gen},{eval},{avg_ei},{max_ei},{std_ei}\n")
-    
+
     # Only call this after save()!
-    def save_tpe_params(self, config: Config, method: str, best_params: List[Dict]) -> None:
+    def save_tpe_params(self, config: Config, method: str, best_params: Dict) -> None:
         """ For methods using TPE, save the modified parameters of the best Individual """
         dataset = config.task_id
         seed = config.seed
@@ -88,9 +88,7 @@ class Logger:
             "test_accuracy_score": self.best_ind.get_test_score(),
             "params": best_params
         }
-                
+
         # Append to existing file
         with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.jsonl", "a") as f:
             f.write(json.dumps(modified_best_ind_data, indent=2))
-
-    
