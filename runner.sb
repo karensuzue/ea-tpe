@@ -34,7 +34,7 @@ METHOD=${METHODS[$METHOD_ID]}
 
 echo "Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}"
 
-python main.py \
+python /home/hernandezj45/Repos/ea-tpe/main.py \
     --method ${METHOD} \
     --task_id ${DATASET} \
     --seed ${REPLICATE} \

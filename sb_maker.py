@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     lines.append("echo \"Running: dataset=${DATASET}, method=${METHOD}, replicate=${REPLICATE}\"\n")
 
-    lines.append("python main.py \\")
+    lines.append("python /home/hernandezj45/Repos/ea-tpe/main.py \\")
     lines.append("    --method ${METHOD} \\")
     lines.append("    --task_id ${DATASET} \\")
     lines.append("    --seed ${REPLICATE} \\")
