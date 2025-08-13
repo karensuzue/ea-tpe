@@ -63,7 +63,7 @@ def main():
     if args.method == 'EA':
         solver = EA(config, logger, param_space)
     elif args.method == 'TPEBO':
-        solver = BO(config, logger, param_space, 'TPE', num_top_cand = 1)
+        solver = BO(config, logger, param_space, 'TPE', num_top_cand = args.pop_size)
     elif args.method == 'TPEC':
         solver = TPEC(config, logger, param_space)
     else:
