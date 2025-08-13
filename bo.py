@@ -42,7 +42,7 @@ class BO:
         self.num_top_cand = num_top_cand
 
         if self.surrogate_type == "TPE":
-            self.surrogate: Surrogate = TPE(self.config.rng)
+            self.surrogate: Surrogate = TPE()
 
         self.samples: List[Individual] = [] # This stores the observed samples
 
@@ -92,7 +92,7 @@ class BO:
             self.samples[index].set_performance(performance)
             if self.config.debug: self.hard_eval_count += 1
 
-        # Remove individuals with positive performance in sample set 
+        # Remove individuals with positive performance in sample set
         self.samples = remove_failed_individuals(self.samples, self.config)
         # Update best performance and set of best performers in the current sample set
         self.best_performance, self.best_performers = process_population_for_best(self.samples, self.best_performance, self.best_performers)
@@ -101,12 +101,13 @@ class BO:
 
         # TPE cannot be fitted over numeric parameters with the value "None" (e.g., max_samples),
         # so we create a deep copy of the original sample set and assign such parameters a value close to 0.
-        # A deep copy is required to preserve the performance of the original individuals,
+        # A deep copy is used to preserve the performance of the original individuals,
         # which is necessary for fitting a TPE over the parameter space.
-        modified_samples: List[Individual] = [copy.deepcopy(ind) for ind in self.samples]
-        # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
-        for ind in modified_samples:
-            ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
+        tpe_samples: List[Individual] = []
+        for ind in self.samples:
+            tpe_samples.append(Individual(params=self.param_space.tpe_parameters(ind.get_params()),
+                                          performance=copy.deepcopy(ind.get_performance())))
+        assert len(tpe_samples) == len(self.samples), "TPE samples size mismatch."
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
@@ -115,7 +116,7 @@ class BO:
                                        self.samples, f"{self.surrogate_type}BO")
 
             # Fit the surrogate to the observed data
-            self.surrogate.fit(modified_samples, self.param_space, self.config.rng)
+            self.surrogate.fit(tpe_samples, self.param_space, self.config.rng)
 
             # Sample enough candidates from the surrogate to keep the number of 'soft' evaluations consistent between BO and TPEC
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space, self.config.rng)
@@ -127,8 +128,7 @@ class BO:
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
-            # NOTE: Personally, I think this approach is reasonable, 
-            # as "candidates" in BO don't have "fixed" counterparts prior to this step. 
+            # As "candidates" in BO don't have "fixed" counterparts prior to this step.
             # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
             for ind in best_candidates: # 'best_candidates' may contain more than 1 Individual
                 self.param_space.fix_parameters(ind.get_params()) # fixes in-place
@@ -141,7 +141,7 @@ class BO:
                                                     self.config.seed,
                                                     self.config.num_cpus))
                 self.hard_eval_count += 1
-                
+
             # remove the best candidate individuals with positive performance
             best_candidates = remove_failed_individuals(best_candidates, self.config)
             # Update sample set
@@ -152,16 +152,16 @@ class BO:
             print(f"Best training performance so far: {self.best_performance}", flush=True)
 
             # Update modified copy of sample set for fitting surrogate
-            modified_best_candidates: List[Individual] = [copy.deepcopy(ind) for ind in best_candidates]
-            for ind in modified_best_candidates:
+            tpe_best_candidates: List[Individual] = [copy.deepcopy(ind) for ind in best_candidates]
+            for ind in tpe_best_candidates:
                 ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
-            modified_samples += modified_best_candidates
+            tpe_samples += tpe_best_candidates
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
 
-        modified_best_ind_params = self.param_space.tpe_parameters(best_ind_params)
+        tpe_best_ind_params = self.param_space.tpe_parameters(best_ind_params)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
@@ -177,7 +177,7 @@ class BO:
         # Log the best observed hyperparameter configuration across all iterations
         self.logger.log_best(best_ind, self.config, f"{self.surrogate_type}BO")
         self.logger.save(self.config, f"{self.surrogate_type}BO")
-        self.logger.save_tpe_params(self.config, f"{self.surrogate_type}BO", modified_best_ind_params)
+        self.logger.save_tpe_params(self.config, f"{self.surrogate_type}BO", tpe_best_ind_params)
 
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}", flush=True)
