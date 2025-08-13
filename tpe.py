@@ -67,8 +67,6 @@ class MultivariateKDE:
         Returns a matrix of shape (dimensions, n_samples)
         """
         # For reproducibility, pull an int seed from the generator
-        # int_seed = self.rng.integers(0, 2**32 - 1)
-        # return self.kde.resample(size=n_samples, seed=int_seed) # shape (dimensions, n_samples)
         return self.kde.resample(size=n_samples, seed=rng) # shape (dimensions, n_samples)
 
 class CategoricalPMF:
@@ -123,7 +121,6 @@ class CategoricalPMF:
             otherwise a single sampled value.
         """
         probabilities = list(self.prob.values())
-        # samples = self.rng.choice(self.all_categories, size=n_samples, p=probabilities)
         samples = rng.choice(self.all_categories, size=n_samples, p=probabilities)
         return samples.tolist()
 
@@ -134,12 +131,11 @@ class TPE(Surrogate):
     and uses kernel density estimation (KDE) and probability mass functions (PMFs)
     to model the likelihood of good and bad configurations.
     """
-    def __init__(self, rng: np.random.default_rng, gamma: float = 0.2):
+    def __init__(self, gamma: float = 0.2):
         """
         Parameters:
             gamma (float): Fraction of samples considered "good".
         """
-        # self.rng = rng
 
         self.gamma = gamma # splitting parameter
 
@@ -161,9 +157,6 @@ class TPE(Surrogate):
         }
 
         numeric_params_names = list(numeric_params.keys())
-        # print("NUMERIC PARAMETER NAMES (SAMPLE): ", numeric_params_names)
-
-        # params: Dict[str, Any] = {} # shape (dimensions, n_samples)
 
         # Sample from the good numeric distribution
         multi_samples = self.multi_l.sample(rng=rng, n_samples=num_samples) # shape (dimensions, n_samples)
@@ -323,7 +316,7 @@ class TPE(Surrogate):
             ind.set_ei((l_num * l_cat) / (g_num * g_cat))
         return np.asarray(ei_scores)
 
-    def suggest(self, param_space: ModelParams, candidates: List[Individual], num_top_cand: int = 1) -> Tuple[List[Individual], np.ndarray, int]:
+    def suggest(self, param_space: ModelParams, candidates: List[Individual], num_top_cand: int = 1) -> Tuple[List[Individual], np.ndarray, np.ndarray, int]:
         """
         Suggest the top-k candidates based on expected improvement.
 
