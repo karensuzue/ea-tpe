@@ -106,13 +106,13 @@ class ModelParams(ABC):
 
     # function to fix any parameters that do not align with scikit-learn's requirements
     @abstractmethod
-    def fix_parameters(self, model_params: Dict[str, Any]) -> None:
+    def variation_fix_parameters(self, model_params: Dict[str, Any]) -> None:
         """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
         pass
 
     @abstractmethod
-    def eval_parameters(self, model_params: Dict[str, Any], X_train, y_train) -> float:
-        """ Evaluates a given set of hyperparameters against some metric. """
+    def eval_parameters(self, model_params: Dict[str, Any]) -> None:
+        """ Fixes a set of parameter for evaluation. """
         pass
 
     @abstractmethod
@@ -145,6 +145,7 @@ class RandomForestParams(ModelParams):
     def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1) -> None:
         """
         Mutates the model parameters (genotype) in-place with a given mutation rate.
+        Should be ready for hard evaluation.
 
         Parameters:
             model_params (Dict[str, Any]): The set of hyperparameters to mutate.
@@ -164,13 +165,14 @@ class RandomForestParams(ModelParams):
                 elif spec["type"] in ["cat", "bool"]:
                     model_params[name] = self.pick_categorical_parameter(spec['bounds'])
 
-        # Fix the parameters to ensure they are valid
-        self.fix_parameters(model_params)
+        # Fix parameters in case of mutation errors
+        self.variation_fix_parameters(model_params)
         return
 
     def generate_random_parameters(self) -> Dict[str, Any]:
         """
         Generates a random set of parameter values based on the defined parameter space.
+        Should be ready for hard evaluation.
 
         Parameters:
             rng_ (np.random.default_rng): A NumPy random generator instance.
@@ -188,7 +190,7 @@ class RandomForestParams(ModelParams):
             else:
                 raise ValueError(f"Unsupported parameter type: {spec['type']}")
         # Fix the parameters to ensure they are valid
-        self.fix_parameters(rand_genotype)
+        self.variation_fix_parameters(rand_genotype)
         return rand_genotype
 
     def get_param_type(self, key: str) -> str:
@@ -202,40 +204,46 @@ class RandomForestParams(ModelParams):
             raise ValueError(f"Unsupported parameter type: {type}")
         return {name: info for name, info in self.param_space.items() if info['type'] == type}
 
-    # @staticmethod
-    def fix_parameters(self, model_params: Dict[str, Any]) -> None:
-        """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
-        # if bootstrap is False, we need to set max_samples to None
-        if not model_params['bootstrap']:
-            model_params['max_samples'] = None
+    def variation_fix_parameters(self, model_params: Dict[str, Any]) -> None:
+        # Fix bootstrap and max_samples parameters in case of variation
         if model_params['bootstrap'] and model_params['max_samples'] is None:
-            model_params['max_samples'] = float(self.rng.uniform(*self.param_space['max_samples']['bounds']))
+            model_params['max_samples'] = self.rng.uniform(self.param_space['max_samples']['bounds'][0], self.param_space['max_samples']['bounds'][1])
+        elif model_params['bootstrap'] and isinstance(model_params['max_samples'], float):
+            return
+        else:
+            assert(model_params['bootstrap'] == False)
+            model_params['max_samples'] = None
         return
-    
+
+    def eval_parameters(self, model_params: Dict[str, Any]) -> None:
+        """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
+        # make sure if 'bootstrap' is True, 'max_samples' must have a numeric value within bounds
+        if model_params['bootstrap']:
+            assert(self.param_space['max_samples']['bounds'][0] <= model_params['max_samples'] <= self.param_space['max_samples']['bounds'][1])
+        else:
+            # if bootstrap is False, we need to set max_samples to None
+            model_params['max_samples'] = None
+        return
+
     def tpe_parameters(self, model_params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Returns a modified copy of 'model_params', which are parameters adjusted for compatibility
-        with the TPE optimizer. 
+        with the TPE optimizer.
         """
         # If 'bootstrap' is True, 'max_samples' must have a numeric value within bounds
         if model_params['bootstrap'] is True:
             bounds = self.param_space['max_samples']['bounds']
-            assert(model_params['max_samples'] is not None 
+            assert(model_params['max_samples'] is not None
                    and bounds[0] <= model_params['max_samples'] <= bounds[1])
-            
+
         # If 'bootstrap' is False, 'max_samples' must be None
-        elif model_params['bootstrap'] is False:
+        if model_params['bootstrap'] is False:
             assert(model_params['max_samples'] is None)
 
         model_params_copy = copy.deepcopy(model_params)
-                                          
-        # for name in model_params_copy:
-        #     if self.param_space[name]['type'] in ['float'] and model_params_copy[name] is None:
-        #             model_params_copy[name] = 1.0e-16
-        #     if self.param_space[name]['type'] in ['int'] and model_params_copy[name] is None:
-        #             model_params_copy[name] = 0
 
         if model_params_copy['max_samples'] is None:
-            model_params_copy['max_samples'] = 1.0e-16
+            # if bootstrap is False, set max_samples to 1.0 (100% of data being used)
+            model_params_copy['max_samples'] = 1.0
 
         return model_params_copy
