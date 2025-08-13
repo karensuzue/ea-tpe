@@ -345,4 +345,4 @@ class TPE(Surrogate):
         sorted_indices = np.argsort(scores)[::-1][:num_top_cand]
         top_candidates = [candidates[int(i)] for i in sorted_indices]
         top_scores = scores[sorted_indices]
-        return top_candidates, top_scores, soft_eval_count
+        return top_candidates, sorted_indices, top_scores, soft_eval_count

@@ -99,7 +99,10 @@ class BO:
         print(f"Initial sample size: {len(self.samples)}", flush=True)
         print(f"Best training performance so far: {self.best_performance}", flush=True)
 
-        # Deep copy to retain evaluated performance
+        # TPE cannot be fitted over numeric parameters with the value "None" (e.g., max_samples),
+        # so we create a deep copy of the original sample set and assign such parameters a value close to 0.
+        # A deep copy is required to preserve the performance of the original individuals,
+        # which is necessary for fitting a TPE over the parameter space.
         modified_samples: List[Individual] = [copy.deepcopy(ind) for ind in self.samples]
         # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
         for ind in modified_samples:
@@ -118,12 +121,14 @@ class BO:
             candidates = self.surrogate.sample(self.config.num_candidates * self.num_top_cand, self.param_space, self.config.rng)
 
             # Select the top candidate(s) for evaluation on the true objective
-            best_candidates, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
+            best_candidates, _, ei_scores, soft_eval_count = self.surrogate.suggest(self.param_space, candidates, self.num_top_cand)
             if self.config.debug: self.soft_eval_count += soft_eval_count
 
             # Log per-iteration expected improvement statistics (only from the chosen candidates)
             self.logger.log_ei(gen, self.config.pop_size + gen * self.num_top_cand, ei_scores)
 
+            # NOTE: Personally, I think this approach is reasonable, 
+            # as "candidates" in BO don't have "fixed" counterparts. 
             # Make sure chosen candidate(s) align with scikit-learn's requirements before evaluation
             for ind in best_candidates: # 'best_candidates' may contain more than 1 Individual
                 self.param_space.fix_parameters(ind.get_params()) # fixes in-place
@@ -156,8 +161,7 @@ class BO:
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
 
-        # revert samples for best_ind
-        # self.param_space.fix_parameters(best_ind_params)
+        modified_best_ind_params = self.param_space.tpe_parameters(best_ind_params)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
@@ -173,6 +177,7 @@ class BO:
         # Log the best observed hyperparameter configuration across all iterations
         self.logger.log_best(best_ind, self.config, f"{self.surrogate_type}BO")
         self.logger.save(self.config, f"{self.surrogate_type}BO")
+        self.logger.save_tpe_params(self.config, f"{self.surrogate_type}BO", modified_best_ind_params)
 
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}", flush=True)

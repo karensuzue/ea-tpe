@@ -9,7 +9,7 @@ from ea import EA
 from tpe import TPE
 from individual import Individual
 from param_space import ModelParams
-from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
+from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best, get_best_performance
 
 class TPEC:
     def __init__(self, config: Config, logger: Logger, param_space: ModelParams):
@@ -74,9 +74,11 @@ class TPEC:
         self.evaluated_individuals += self.population
         assert(len(self.evaluated_individuals) == len(self.population))
 
-        # Deep copy to retain evaluated performance
+        # TPE cannot be fitted over numeric parameters with the value "None" (e.g., max_samples),
+        # so we create a deep copy of the original archive and assign such parameters a value close to 0.
+        # A deep copy is required to preserve the performance of the original individuals,
+        # which is necessary for fitting a TPE over the parameter space.
         modified_archive: List[Individual] = [copy.deepcopy(ind) for ind in self.evaluated_individuals]
-        # Can't fit KDEs over numeric parameters with value "None" (e.g. max_samples), set them to a small value
         for ind in modified_archive:
             ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
 
@@ -88,8 +90,13 @@ class TPEC:
             # Fit TPE to the modified archive of all observed individuals
             self.tpe.fit(modified_archive, self.param_space, self.config.rng)
 
+            # NOTE: Needs to retain performance, so can't use the following line, which creates unevaluated Individuals
+            # self.tpe.fit([Individual(self.param_space.tpe_parameters(ind.get_params())) for ind in self.evaluated_individuals],
+                          # self.param_space, self.config.rng)
+
             # To store the next population
             new_pop = []
+            
             # List containing the expected improvement scores of the chosen offspring (1 per parent),
             # or essentially, members of the new population
             ei_all_parents: List[float] = []
@@ -103,27 +110,23 @@ class TPEC:
             for parent in parents:
                 # Deep copy parent parameters separately to prevent offspring from being pre-evaluated
                 candidate_params = [copy.deepcopy(parent.get_params()) for _ in range(self.config.num_candidates)]
-                for i, param in enumerate(candidate_params):
+                candidate_params_tpe = [] # copy of 'candidate_params', but modified, leave original as fail-safe
+                for param in candidate_params:
                     # Mutations occur in place, includes fixing
                     self.param_space.mutate_parameters(param, self.config.mut_rate)
                     # Can't use TPE's suggest() on candidates if numeric parameters have value "None" (e.g. max_samples)
-                    candidate_params[i] = self.param_space.tpe_parameters(param)
+                    candidate_params_tpe.append(self.param_space.tpe_parameters(param))
 
-                candidates = [Individual(param) for param in candidate_params]
+                candidates = [Individual(param) for param in candidate_params_tpe]
                 assert len(candidates) == self.config.num_candidates
 
                 # Evaluate each candidate's expected improvement score, suggest one
-                best_candidate, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1)
+                _, best_index, best_ei_scores, se_count = self.tpe.suggest(self.param_space, candidates, num_top_cand = 1)
                 if self.config.debug: self.soft_eval_count += se_count
-                assert len(best_candidate) == 1
-
-                # Make sure chosen candidate align with scikit-learn's requirements before evaluation
-                # The system allows 'best_candidate' to contain more than one Individual (num_top_cand >= 1),
-                for ind in best_candidate: # 'best_candidate' should contain a single Individual
-                    self.param_space.fix_parameters(ind.get_params()) # fixes in-place
+                assert len(best_index) == 1
 
                 # Append to new population
-                new_pop += best_candidate # a bit sloppy, but works
+                new_pop += [Individual(candidate_params[i]) for i in best_index] # a bit sloppy, but works
                 ei_all_parents += best_ei_scores.tolist() # this should be one score
 
             # Update population
@@ -169,8 +172,7 @@ class TPEC:
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
 
-        # revert samples for best_ind
-        # self.param_space.fix_parameters(best_ind_params)
+        modified_best_ind_params = self.param_space.tpe_parameters(best_ind_params)
 
         # Final scores
         train_accuracy, test_accuracy = eval_final_factory(self.config.model, best_ind_params,
@@ -183,6 +185,7 @@ class TPEC:
         self.logger.log_generation(generations, self.config.pop_size * (generations + 1), self.population, "TPEC")
         self.logger.log_best(best_ind, self.config, "TPEC")
         self.logger.save(self.config, "TPEC")
+        self.logger.save_tpe_params(self.config, "TPEC", modified_best_ind_params)
 
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}", flush=True)

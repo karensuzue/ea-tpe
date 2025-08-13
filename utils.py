@@ -148,7 +148,7 @@ def get_best_performance(population: List[Individual]) -> float:
     return min([ind.get_performance() for ind in population])
 
 # process the current population and update self.best_performers and self.best_performance
-def process_population_for_best(population: List[Individual], best_performance: float, best_performers: List[Dict]) -> None:
+def process_population_for_best(population: List[Individual], best_performance: float, best_performers: List[Dict]) -> Tuple[float, List[Dict]]:
     """
     Processes the current population and updates self.best_performers and self.best_performance.
     """

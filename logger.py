@@ -3,7 +3,7 @@ import os
 import json
 from config import Config
 from individual import Individual
-from typing import List
+from typing import List, Dict
 
 class Logger:
     def __init__(self, logdir: str):
@@ -58,7 +58,7 @@ class Logger:
             for gen, eval, best, avg, median, std in self.history:
                 f.write(f"{gen},{eval},{best},{avg},{median},{std}\n")
 
-        with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.json", "w") as f:
+        with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.jsonl", "w") as f:
             json.dump(self.best_ind_data, f, indent=2)
 
         if self.ei_history:
@@ -68,12 +68,18 @@ class Logger:
                     f.write(f"{gen},{eval},{avg_ei},{max_ei},{std_ei}\n")
     
     # Only call this after save()!
-    def save_tpe_params(self, config: Config, method: str) -> None:
+    def save_tpe_params(self, config: Config, method: str, best_params: List[Dict]) -> None:
         """ For methods using TPE, save the modified parameters of the best Individual """
         dataset = config.task_id
         seed = config.seed
+
+        # Boolean values can't be written to JSON, so we convert them to type string
+        for name, val in best_params.items():
+            if isinstance(val, (bool, np.bool_)):
+                best_params[name] = str(val)
+
         modified_best_ind_data = {
-            "dataset" = dataset,
+            "dataset" : dataset,
             "replicate": config.seed,
             "evaluations": config.evaluations,
             "method": method,
@@ -82,8 +88,9 @@ class Logger:
             "test_accuracy_score": self.best_ind.get_test_score(),
             "params": best_params
         }
+                
         # Append to existing file
-        with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.json", "a") as f:
-            json.dump()
+        with open(f"{self.logdir}/{dataset}/result_{method}_{seed}.jsonl", "a") as f:
+            f.write(json.dumps(modified_best_ind_data, indent=2))
 
     
