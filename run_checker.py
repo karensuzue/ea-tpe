@@ -30,5 +30,5 @@ def check_slurm_outputs(directory, job_id=2156939, max_id=1080):
 
 if __name__ == "__main__":
     # Replace with your directory path
-    directory = "/path/to/slurm/output"
+    directory = "/home/hernandezj45/Repos/ea-tpe"
     check_slurm_outputs(directory)
