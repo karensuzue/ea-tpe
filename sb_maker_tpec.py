@@ -2,20 +2,20 @@
 File to generate SLURM script for TPEC
 """
 
-# sbatch --export=OFFSET=$((i * 1024)) runner_tpec.sb
+# sbatch --export=OFFSET=$((i * 512)) runner_tpec.sb
 
 import pandas as pd
 
 def make_header(array_max, nodes = 1, ntasks = 1, cpus = 12):
     lines = [
-        "#!/bin/bash",
+        "#!/bin/bash --login",
         "########## Define Resources Needed with SBATCH Lines ##########",
         f"#SBATCH --nodes={nodes}",
         f"#SBATCH --ntasks={ntasks}",
 
         # Comment out if jobs exceed limit
         # f"#SBATCH --array=1-{array_max}",
-        f"#SBATCH --array=1-1024",
+        f"#SBATCH --array=1-512",
 
         f"#SBATCH --cpus-per-task={cpus}",
         "#SBATCH -t 24:00:00",
