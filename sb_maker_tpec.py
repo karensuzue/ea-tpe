@@ -2,6 +2,7 @@
 File to generate SLURM script for TPEC
 """
 
+# sbatch --export=OFFSET=$((i * 1024)) runner_tpec.sb
 
 import pandas as pd
 
@@ -11,13 +12,17 @@ def make_header(array_max, nodes = 1, ntasks = 1, cpus = 12):
         "########## Define Resources Needed with SBATCH Lines ##########",
         f"#SBATCH --nodes={nodes}",
         f"#SBATCH --ntasks={ntasks}",
-        f"#SBATCH --array=1-{array_max}",
+
+        # Comment out if jobs exceed limit
+        # f"#SBATCH --array=1-{array_max}",
+        f"#SBATCH --array=1-1024",
+
         f"#SBATCH --cpus-per-task={cpus}",
         "#SBATCH -t 24:00:00",
         "#SBATCH --mem=100GB",
         "#SBATCH --job-name=tpe",
         "#SBATCH -p defq",
-        "#SBATCH --exclude=esplhpc-cp040",
+        # "#SBATCH --exclude=esplhpc-cp040",
         "###############################################################\n"
     ]
 
@@ -58,7 +63,7 @@ if __name__ == "__main__":
     lines.append("MUT_RATES=(" + " ".join(str(mr) for mr in mut_rates) + ")\n")
 
     # slurm array starts at 1, bash array starts at 0
-    lines.append("ID=$((SLURM_ARRAY_TASK_ID - 1))")
+    lines.append("ID=$(( SLURM_ARRAY_TASK_ID - 1 + ${OFFSET:-0} ))")
 
     lines.append(f"DATASET_ID=$(( ID / ({replicates} * {len(mut_rates)} * {len(tour_sizes)}) ))")
     lines.append(f"TOUR_SIZE_ID=$(( (ID / ({len(mut_rates)} * {replicates})) % {len(tour_sizes)} ))")
