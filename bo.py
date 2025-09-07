@@ -70,7 +70,7 @@ class BO:
         """
         # Initialize Ray
         if not ray.is_initialized():
-            ray.init(num_cpus = self.config.num_cpus, include_dashboard = True)
+            ray.init(num_cpus = self.config.num_cpus, include_dashboard = False)
 
         # Initialize observed sample set, its size is determined by the 'pop_size' parameter in the Config
         self.samples = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]

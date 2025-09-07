@@ -40,7 +40,7 @@ class TPEC:
         """
         # Initialize Ray (multiprocessing)
         if not ray.is_initialized():
-            ray.init(num_cpus = self.config.num_cpus, include_dashboard = True)
+            ray.init(num_cpus = self.config.num_cpus, include_dashboard = False)
 
         # Initialize population with random organisms
         self.population = [Individual(self.param_space.generate_random_parameters()) for _ in range(self.config.pop_size)]
