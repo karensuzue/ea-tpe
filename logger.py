@@ -53,7 +53,7 @@ class Logger:
         dataset = config.task_id
         seed = config.seed
         mut_rate_str = str(config.mut_rate).replace(".", ",")
-        tour_size_str = config.tour_size
+        tour_size = config.tour_size
         os.makedirs(f"{self.logdir}/{dataset}", exist_ok=True)
         with open(f"{self.logdir}/{dataset}/log_{method}_mut{mut_rate_str}_tour{tour_size}_{seed}.csv", "w") as f:
             f.write("generation,evaluation,best,average,median,std\n")

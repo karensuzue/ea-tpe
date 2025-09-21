@@ -1,0 +1,49 @@
+#!/bin/bash --login
+########## Define Resources Needed with SBATCH Lines ##########
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --array=481-800
+#SBATCH --cpus-per-task=12
+#SBATCH -t 36:00:00
+#SBATCH --mem=100GB
+#SBATCH --job-name=tpe
+#SBATCH -p defq
+###############################################################
+
+source ~/anaconda3/etc/profile.d/conda.sh
+conda init
+conda activate tpe-ea
+
+DATA_DIR=/mnt/home/suzuekar/ea-tpe/data/
+RESULTS_DIR=/mnt/home/suzuekar/ea-tpe/results
+
+##################################
+# Treatments
+##################################
+
+DATASETS=(2073 168757 168784 190146 190410)
+TOUR_SIZES=(5 10 25 50)
+MUT_RATES=(0.25 0.5 0.75 1.0)
+
+ID=$(( SLURM_ARRAY_TASK_ID - 1 + ${OFFSET:-0} ))
+DATASET_ID=$(( ID / (20 * 4 * 4) ))
+TOUR_SIZE_ID=$(( (ID / (4 * 20)) % 4 ))
+MUT_RATE_ID=$(( (ID / 20) % 4 ))
+REPLICATE=$(( ID % 20 ))
+
+DATASET=${DATASETS[$DATASET_ID]}
+TOUR_SIZE=${TOUR_SIZES[$TOUR_SIZE_ID]}
+MUT_RATE=${MUT_RATES[$MUT_RATE_ID]}
+
+echo "ID=$ID Dataset=$DATASET TourSize=$TOUR_SIZE MutRate=$MUT_RATE Replicate=$REPLICATE" 
+
+python /mnt/home/suzuekar/ea-tpe/main.py \
+    --method TPEC \
+    --task_id ${DATASET} \
+    --seed ${REPLICATE} \
+    --tour_size ${TOUR_SIZE} \
+    --mut_rate ${MUT_RATE} \
+    --evaluations 1000 \
+    --num_cpus 12 \
+    --debug True \
+    --logdir ${RESULTS_DIR}
