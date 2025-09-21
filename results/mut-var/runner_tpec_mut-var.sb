@@ -46,7 +46,7 @@ python /mnt/home/suzuekar/ea-tpe/main.py \
     --seed ${REPLICATE} \
     --tour_size ${TOUR_SIZE} \
     --mut_rate ${MUT_RATE} \
-    --mut_var ${MUT_VAR}
+    --mut_var ${MUT_VAR} \
     --evaluations 1000 \
     --num_cpus 12 \
     --debug True \
