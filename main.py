@@ -34,6 +34,8 @@ def main():
                         help = "Model to be used.")
     parser.add_argument("--num_cpus", type = int, default = 1,
                         help = "The number of CPU cores to use for multiprocessing")
+    parser.add_argument("--mut_var", type = float, default = 0.05,
+                        help = "Mutation variance. ")
     args = parser.parse_args()
 
     rng_ = np.random.default_rng(args.seed)
@@ -53,7 +55,8 @@ def main():
         method = args.method,
         debug = args.debug,
         rng = rng_,
-        num_cpus = args.num_cpus
+        num_cpus = args.num_cpus,
+        mut_var = args.mut_var
     )
 
     logger = Logger(

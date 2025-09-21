@@ -105,7 +105,7 @@ class TPEC:
                 candidate_params_tpe = [] # copy of 'candidate_params', but modified, leave original as fail-safe
                 for param in candidate_params:
                     # Mutations occur in place, includes fixing
-                    self.param_space.mutate_parameters(param, self.config.mut_rate)
+                    self.param_space.mutate_parameters(param, self.config.mut_rate, self.config.mut_var)
                     # Can't use TPE's suggest() on candidates if numeric parameters have value "None" (e.g. max_samples)
                     candidate_params_tpe.append(self.param_space.tpe_parameters(param))
 
