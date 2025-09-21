@@ -63,26 +63,26 @@ class ModelParams(ABC):
         pass
 
     # function to shift float paramters either up or down
-    def shift_float_parameter(self, cur_value: float, min: float, max: float) -> float:
+    def shift_float_parameter(self, cur_value: float, min: float, max: float, var: float = 0.05) -> float:
         """ Shifts a float parameter either up or down within bounds. """
         # rng = np.random.default_rng(rng_)
         # 68% of increases/decreases will be within 5% of the current value
         # 95% of increases/decreases will be within 10% of the current value
         # 99.7% of increases/decreases will be within 15% of the
-        value = float(cur_value * self.rng.normal(1.0, 0.05))
+        value = float(cur_value * self.rng.normal(1.0, var))
 
         # ensure the value is within the bounds, clip to safe boundaries
         eps = 1e-12
         return np.clip(value, min + eps, max - eps)
 
     # function to shift integer parameters either up or down
-    def shift_int_parameter(self, cur_value: int, min: int, max: int) -> int:
+    def shift_int_parameter(self, cur_value: int, min: int, max: int, var: float = 0.05) -> int:
         """ Shifts an integer parameter either up or down within bounds. """
         # rng = np.random.default_rng(rng_)
         # 68% of increases/decreases will be within 5% of the current value
         # 95% of increases/decreases will be within 10% of the current value
         # 99.7% of increases/decreases will be within 15% of the
-        value = int(cur_value * self.rng.normal(1.0, 0.05))
+        value = int(cur_value * self.rng.normal(1.0, var))
 
         # ensure the value is within the bounds
         if value < min:
@@ -142,7 +142,7 @@ class RandomForestParams(ModelParams):
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
-    def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1) -> None:
+    def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1, var: float = 0.05) -> None:
         """
         Mutates the model parameters (genotype) in-place with a given mutation rate.
         Should be ready for hard evaluation.
@@ -156,12 +156,12 @@ class RandomForestParams(ModelParams):
             # Coin flip to decide whether to mutate each parameter
             if self.rng.uniform() < mut_rate:
                 if spec["type"] == "int":
-                    model_params[name] = self.shift_int_parameter(int(model_params[name]), spec['bounds'][0], spec['bounds'][1])
+                    model_params[name] = self.shift_int_parameter(int(model_params[name]), spec['bounds'][0], spec['bounds'][1], var)
                 elif spec["type"] == "float":
                     if name == "max_samples" and model_params[name] is None:
                         continue
                     else:
-                        model_params[name] = self.shift_float_parameter(float(model_params[name]), spec['bounds'][0], spec['bounds'][1])
+                        model_params[name] = self.shift_float_parameter(float(model_params[name]), spec['bounds'][0], spec['bounds'][1], var)
                 elif spec["type"] in ["cat", "bool"]:
                     model_params[name] = self.pick_categorical_parameter(spec['bounds'])
 

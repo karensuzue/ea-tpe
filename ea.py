@@ -79,7 +79,7 @@ class EA:
 
             # In-place mutation with fixing, deep copy required
             child_params = copy.deepcopy(parent.get_params())
-            self.param_space.mutate_parameters(child_params, self.config.mut_rate)
+            self.param_space.mutate_parameters(child_params, self.config.mut_rate, self.config.mut_var)
             offspring_params.append(child_params)
 
         assert(len(offspring_params) == num_offspring)
