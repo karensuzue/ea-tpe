@@ -100,7 +100,7 @@ class ModelParams(ABC):
         return self.rng.choice(choices)
 
     @abstractmethod
-    def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1) -> None:
+    def mutate_parameters(self, model_params: Dict[str, Any], mut_rate: float = 0.1, var: float = 0.05) -> None:
         """ Mutates a given set of hyperparameters in-place. """
         pass
 
