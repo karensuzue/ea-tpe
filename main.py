@@ -36,6 +36,8 @@ def main():
                         help = "The number of CPU cores to use for multiprocessing")
     parser.add_argument("--mut_var", type = float, default = 0.05,
                         help = "Mutation variance. ")
+    parser.add_argument("--cv_k", type = int, default = 3,
+                        help = "Number of cross-validation folds. ")
     args = parser.parse_args()
 
     rng_ = np.random.default_rng(args.seed)
@@ -56,7 +58,8 @@ def main():
         debug = args.debug,
         rng = rng_,
         num_cpus = args.num_cpus,
-        mut_var = args.mut_var
+        mut_var = args.mut_var,
+        cv_k = args.cv_k
     )
 
     logger = Logger(
