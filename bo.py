@@ -10,7 +10,8 @@ from surrogate import Surrogate
 from tpe import TPE
 from typeguard import typechecked
 from typing import Dict, List, Literal
-from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
+from utils import eval_final_factory, remove_failed_individuals, process_population_for_best, evaluation
+from sklearn.model_selection import KFold
 
 @typechecked
 class BO:
@@ -79,18 +80,13 @@ class BO:
         X_train_ref = ray.put(X_train)
         y_train_ref = ray.put(y_train)
 
-        # Evaluate initial samples with Ray
-        ray_evals: List[ObjectRef] = [
-            ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-            for i, ind in enumerate(self.samples) # each ObjectRef leads to a Tuple[float, int]
-        ]
-        # Process results as they come in
-        while len(ray_evals) > 0:
-            done, ray_evals = ray.wait(ray_evals, num_returns = 1)
-            # Extract the only result (Tuple[float, int]) from the 'done' list
-            performance, index = ray.get(done)[0]
-            self.samples[index].set_performance(performance)
-            if self.config.debug: self.hard_eval_count += 1
+        # create cv splits for cross-validation
+        self.cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
+        self.splits = list(self.cv.split(X_train, y_train))
+
+        # Evaluate initial population with Ray
+        evaluation(self.samples, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+        if self.config.debug: self.hard_eval_count += len(self.samples)
 
         # Remove individuals with positive performance in sample set
         self.samples = remove_failed_individuals(self.samples, self.config)
@@ -133,18 +129,9 @@ class BO:
             for ind in best_candidates: # 'best_candidates' may contain more than 1 Individual
                 self.param_space.eval_parameters(ind.get_params()) # fixes in-place
 
-            # Evaluate initial samples with Ray
-            ray_evals: List[ObjectRef] = [
-                ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                for i, ind in enumerate(best_candidates) # each ObjectRef leads to a Tuple[float, int]
-            ]
-            # Process results as they come in
-            while len(ray_evals) > 0:
-                done, ray_evals = ray.wait(ray_evals, num_returns = 1)
-                # Extract the only result (Tuple[float, int]) from the 'done' list
-                performance, index = ray.get(done)[0]
-                best_candidates[index].set_performance(performance)
-                if self.config.debug: self.hard_eval_count += 1
+            # Evaluate the best candidates of samples with Ray
+            evaluation(best_candidates, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+            if self.config.debug: self.hard_eval_count += len(best_candidates)
 
             # remove the best candidate individuals with positive performance
             best_candidates = remove_failed_individuals(best_candidates, self.config)

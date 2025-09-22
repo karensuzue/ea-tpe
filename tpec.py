@@ -9,7 +9,8 @@ from ea import EA
 from tpe import TPE
 from individual import Individual
 from param_space import ModelParams
-from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
+from utils import eval_final_factory, remove_failed_individuals, process_population_for_best, evaluation
+from sklearn.model_selection import KFold
 
 class TPEC:
     def __init__(self, config: Config, logger: Logger, param_space: ModelParams):
@@ -49,18 +50,13 @@ class TPEC:
         X_train_ref = ray.put(X_train)
         y_train_ref = ray.put(y_train)
 
-        # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
-        ray_evals: List[ObjectRef] = [
-            ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-            for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
-        ]
-        # Process results as they come in
-        while len(ray_evals) > 0:
-            done, ray_evals = ray.wait(ray_evals, num_returns = 1)
-            # Extract the only result (Tuple[float, int]) from the 'done' list
-            performance, index = ray.get(done)[0]
-            self.population[index].set_performance(performance)
-            if self.config.debug: self.hard_eval_count += 1
+        # create cv splits for cross-validation
+        self.cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
+        self.splits = list(self.cv.split(X_train, y_train))
+
+        # Evaluate initial population with Ray
+        evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+        if self.config.debug: self.hard_eval_count += len(self.population)
 
         # Remove individuals with positive performance
         self.population = remove_failed_individuals(self.population, self.config)
@@ -123,21 +119,13 @@ class TPEC:
 
             # Update population
             assert len(new_pop) == self.config.pop_size, f"New population size {len(new_pop)} does not match expected size {self.config.pop_size}."
+
+            # set new population
             self.population = new_pop
 
-            # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
-            ray_evals: List[ObjectRef] = [
-                ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
-            ]
-            # Process results as they come in
-            while len(ray_evals) > 0:
-                done, ray_evals = ray.wait(ray_evals, num_returns = 1)
-                # Extract the only result (Tuple[float, int]) from the 'done' list
-                performance, index = ray.get(done)[0]
-                self.population[index].set_performance(performance)
-                if self.config.debug: self.hard_eval_count += 1
-                self.population = new_pop
+            # Evaluate the new population with Ray
+            evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+            if self.config.debug: self.hard_eval_count += len(self.population)
 
             # remove individuals with positive performance
             self.population = remove_failed_individuals(self.population, self.config)

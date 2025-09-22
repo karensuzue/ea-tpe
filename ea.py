@@ -8,8 +8,10 @@ from individual import Individual
 from param_space import ModelParams
 from typeguard import typechecked
 from typing import List, Tuple, Dict
-from utils import ray_eval_factory, eval_final_factory, remove_failed_individuals, process_population_for_best
+from utils import evaluation, eval_final_factory, remove_failed_individuals, process_population_for_best
 import copy as cp
+from sklearn.model_selection import KFold
+
 
 @typechecked
 class EA:
@@ -57,6 +59,10 @@ class EA:
         extracted_performances = performances[indices]
         # Get the position of the best (lowest) performance in the tournament (not population-based index)
         best_tour_idx = np.argmin(extracted_performances)
+        # find all individuals with the best performance (in case of ties)
+        best_indices = [i for i, perf in zip(indices, extracted_performances) if perf == extracted_performances[best_tour_idx]]
+        # randomly select one of the tied best individuals
+        best_tour_idx = self.config.rng.choice(best_indices)
         # Get the best individual among tournament contestants, the parent
         parent = population[indices[best_tour_idx]]
         return parent
@@ -104,17 +110,13 @@ class EA:
         X_train_ref = ray.put(X_train)
         y_train_ref = ray.put(y_train)
 
-        # Evaluate population with Ray; 1 remote task per individual or set of hyperparameters
-        ray_evals: List[ObjectRef] = [
-            ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-            for i, ind in enumerate(self.population) # each ObjectRef leads to a Tuple[float, int]
-        ]
-        # Process results as they come in
-        while len(ray_evals) > 0:
-            done, ray_evals = ray.wait(ray_evals, num_returns = 1)
-            performance, index = ray.get(done)[0]
-            self.population[index].set_performance(performance)
-            if self.config.debug: self.hard_eval_count += 1
+        # create cv splits for cross-validation
+        self.cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
+        self.splits = list(self.cv.split(X_train, y_train))
+
+        # Evaluate initial population with Ray
+        evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+        if self.config.debug: self.hard_eval_count += len(self.population)
 
         # Remove individuals with positive performance
         self.population = remove_failed_individuals(self.population, self.config)
@@ -131,16 +133,8 @@ class EA:
             self.population = self.make_offspring(self.population, self.config.pop_size)
 
             # Evaluate offspring with Ray
-            ray_child_evals: List[ObjectRef] = [
-                ray_eval_factory.remote(self.config.model, ind.get_params(), X_train_ref, y_train_ref, self.config.seed, i)
-                for i, ind in enumerate(self.population)
-            ]
-            while len(ray_child_evals) > 0:
-                # ray_child_evals shrinks as it gets updated
-                done, ray_child_evals = ray.wait(ray_child_evals, num_returns = 1)
-                performance, index = ray.get(done)[0]
-                self.population[index].set_performance(performance)
-                if self.config.debug: self.hard_eval_count += 1
+            evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+            if self.config.debug: self.hard_eval_count += len(self.population)
 
             # remove individuals with positive performance
             self.population = remove_failed_individuals(self.population, self.config)
