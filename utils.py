@@ -19,27 +19,6 @@ def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_t
 
     return train_accuracy, test_accuracy
 
-
-def ray_eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, index: int) -> Tuple[float, int]:
-    """
-    Evaluates a given set of hyperparameters on cross-validated accuracy.
-
-    Parameters:
-        model_params (Dict[str, Any]): The set of hyperparameters to evaluate.
-    """
-    # Must use the same seed/random_state across parameters and methods,
-    # to maintain the same CV splits
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed) # initialize our cv splitter
-    # Both model internals and data splits are reproducible
-    model = RandomForestClassifier(**model_params, random_state=seed)
-    try:
-        score = cross_val_score(model, X_train, y_train, cv=cv, scoring='accuracy').mean()
-    except Exception as e:
-        print(f"Error evaluating model {index} parameters {model_params}: {e}")
-        return 1.0, index  # Return a high score to avoid selecting this individual
-    return -1.0 * score, index  # minimize
-
-
 def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, n_jobs: int) -> float:
     """
     Evaluates a given set of hyperparameters on cross-validated accuracy.
@@ -59,7 +38,6 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
         return 1.0  # Return a high score to avoid selecting this individual
     return -1.0 * score  # minimizes
 
-
 def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
     if model == 'RF':
         # print("Final evaluations for RF") # debug
@@ -67,37 +45,12 @@ def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_trai
     else:
         raise ValueError(f"Unsupported model: {model}")
 
-
 def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
                     seed: int, n_jobs: int) -> float:
     if model == 'RF':
         return eval_parameters_RF(model_params, X_train, y_train, seed, n_jobs)
     else:
         raise ValueError(f"Unsupported model: {model}")
-
-
-@ray.remote
-def ray_eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
-                 seed: int, index: int) -> Tuple[float, int]:
-    """
-    Computes the performance score for the given set of hyperparameters under the specified model type.
-
-    Parameters:
-        model (str): The name of the model to evaluate (e.g., 'RF').
-        model_params (Dict[str, Any]): The hyperparameters for the model.
-        X_train, y_train: The training data.
-        seed (int): Random seed for reproducibility.
-        index (Optional[int]): Index of the individual in the population (used for Ray-based parallel evaluation).
-
-    Returns:
-        Tuple[float, Optional[int]]: The performance score and (optionally) the individual's index.
-    """
-    if model == 'RF':
-        # print("Evaluation for RF.") # debug
-        return ray_eval_parameters_RF(model_params, X_train, y_train, seed, index)
-    else:
-        raise ValueError(f"Unsupported model: {model}")
-
 
 def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     if model == 'RF':
@@ -108,6 +61,53 @@ def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     else:
         raise ValueError(f"Unsupported model: {model}")
 
+@ray.remote
+def ray_RF_eval(model_params: Dict[str, Any], X_train, y_train, train_split, validation_split, seed: int, id: int) -> Tuple[float, int, float]:
+    # initialize the RF model
+    model = RandomForestClassifier(**model_params, random_state=seed)
+
+    # try to fit
+    try:
+        # fit model on training data split
+        model.fit(X_train[train_split], y_train[train_split])
+        accuracy = model.score(X_train[validation_split], y_train[validation_split])
+        return -1.0 * float(accuracy), id, 1.0
+
+    except Exception as e:
+        # failed
+        return -1.0, id, -1.0
+
+# function to take in a population, X and y train ray ids, and cross-validation splits to parallel evaluate the population
+def evaluation(population: List[Individual], X_train: ray.ObjectID, y_train: ray.ObjectID, cv_splits: List, model: str, seed: int) -> None:
+    # create a dictionary to hold each individual's in the population scores across each fold
+    individual_scores = {i: {'cv': [], 'error': False} for i in range(len(population))}
+
+    # create a ray job for each individual in the population for each fold in the cross-validation splits
+    ray_jobs = []
+    for i, individual in enumerate(population):
+        for _, (train_split, validation_split) in enumerate(cv_splits):
+            if model == 'RF':
+                ray_jobs.append(ray_RF_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
+            else:
+                raise ValueError(f"Unsupported model: {model}")
+
+    # process the ray jobs as they finish
+    while len(ray_jobs) > 0:
+        done, ray_jobs = ray.wait(ray_jobs, num_returns = 1)
+        score, id, error = ray.get(done)[0]
+        if error < 0.0:
+            individual_scores[id]['error'] = True
+        individual_scores[id]['cv'].append(score)
+    # make sure all individuals have the correct number of folds
+    assert all(len(individual_scores[i]['cv']) == len(cv_splits) for i in range(len(population))), "Not all individuals have the correct number of CV folds."
+
+    # set each individual's performance to the mean of their cross-validation scores, or to a positive value if they had an error
+    for i, individual in enumerate(population):
+        if individual_scores[i]['error']:
+            individual.set_performance(1.0) # set to a positive value to indicate failure
+        else:
+            individual.set_performance(np.mean(individual_scores[i]['cv']))
+    return
 
 #https://github.com/automl/ASKL2.0_experiments/blob/84a9c0b3af8f7ac6e2a003d4dea5e6dce97d4315/experiment_scripts/utils.py
 def load_task(task_id: int, data_dir: str, preprocess=True):
@@ -156,7 +156,7 @@ def process_population_for_best(population: List[Individual], best_performance: 
 
     # check if we have found a better performance
     if current_best < best_performance:
-        best_performance = current_best 
+        best_performance = current_best
         best_performers = []
 
     # add all individuals with the current best performance to the best performers
