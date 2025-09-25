@@ -51,11 +51,11 @@ class TPEC:
         y_train_ref = ray.put(y_train)
 
         # create cv splits for cross-validation
-        self.cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
-        self.splits = list(self.cv.split(X_train, y_train))
+        cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
+        splits = list(cv.split(X_train, y_train))
 
         # Evaluate initial population with Ray
-        evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+        evaluation(self.population, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
         if self.config.debug: self.hard_eval_count += len(self.population)
 
         # Remove individuals with positive performance
@@ -124,7 +124,7 @@ class TPEC:
             self.population = new_pop
 
             # Evaluate the new population with Ray
-            evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+            evaluation(self.population, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
             if self.config.debug: self.hard_eval_count += len(self.population)
 
             # remove individuals with positive performance

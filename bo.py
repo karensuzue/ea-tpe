@@ -81,11 +81,11 @@ class BO:
         y_train_ref = ray.put(y_train)
 
         # create cv splits for cross-validation
-        self.cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
-        self.splits = list(self.cv.split(X_train, y_train))
+        cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
+        splits = list(cv.split(X_train, y_train))
 
         # Evaluate initial population with Ray
-        evaluation(self.samples, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+        evaluation(self.samples, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
         if self.config.debug: self.hard_eval_count += len(self.samples)
 
         # Remove individuals with positive performance in sample set
@@ -130,7 +130,7 @@ class BO:
                 self.param_space.eval_parameters(ind.get_params()) # fixes in-place
 
             # Evaluate the best candidates of samples with Ray
-            evaluation(best_candidates, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+            evaluation(best_candidates, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
             if self.config.debug: self.hard_eval_count += len(best_candidates)
 
             # remove the best candidate individuals with positive performance

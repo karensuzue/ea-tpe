@@ -53,18 +53,18 @@ class EA:
         """
         assert(len(population) == len(performances))
 
-        # Randomly choose a tour_size number of indices (determined by config)
+        # Randomly choose a tour_size number of population indices (determined by config)
         indices = self.config.rng.choice(len(population), self.config.tour_size, replace=False)
         # Extract performances at the chosen indices
         extracted_performances = performances[indices]
         # Get the position of the best (lowest) performance in the tournament (not population-based index)
         best_tour_idx = np.argmin(extracted_performances)
-        # find all individuals with the best performance (in case of ties)
+        # Find the population index of all individuals in tournament with the best performance (in case of ties)
         best_indices = [i for i, perf in zip(indices, extracted_performances) if perf == extracted_performances[best_tour_idx]]
-        # randomly select one of the tied best individuals
+        # Randomly select one of the tied best individuals (population-based index)
         best_tour_idx = self.config.rng.choice(best_indices)
         # Get the best individual among tournament contestants, the parent
-        parent = population[indices[best_tour_idx]]
+        parent = population[best_tour_idx]
         return parent
 
     def make_offspring(self, population: List[Individual], num_offspring: int) -> List[Individual]:
@@ -111,11 +111,11 @@ class EA:
         y_train_ref = ray.put(y_train)
 
         # create cv splits for cross-validation
-        self.cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
-        self.splits = list(self.cv.split(X_train, y_train))
+        cv = KFold(n_splits=self.config.cv_k, shuffle=True, random_state=self.config.seed)
+        splits = list(cv.split(X_train, y_train))
 
         # Evaluate initial population with Ray
-        evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+        evaluation(self.population, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
         if self.config.debug: self.hard_eval_count += len(self.population)
 
         # Remove individuals with positive performance
@@ -133,7 +133,7 @@ class EA:
             self.population = self.make_offspring(self.population, self.config.pop_size)
 
             # Evaluate offspring with Ray
-            evaluation(self.population, X_train_ref, y_train_ref, self.splits, self.config.model, self.config.seed)
+            evaluation(self.population, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
             if self.config.debug: self.hard_eval_count += len(self.population)
 
             # remove individuals with positive performance
