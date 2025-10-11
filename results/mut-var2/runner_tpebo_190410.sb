@@ -1,0 +1,35 @@
+#!/bin/bash --login
+########## Define Resources Needed with SBATCH Lines ##########
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --array=1-20
+#SBATCH --cpus-per-task=24
+#SBATCH -t 24:00:00
+#SBATCH --mem=100GB
+#SBATCH --job-name=tpe
+#SBATCH -p defq
+###############################################################
+
+source ~/anaconda3/etc/profile.d/conda.sh
+conda init
+conda activate tpe-ea
+
+DATA_DIR=/mnt/home/suzuekar/ea-tpe/data/
+RESULTS_DIR=/mnt/home/suzuekar/ea-tpe/results/mut-var2
+
+##################################
+# Treatments
+##################################
+
+ID=$(( SLURM_ARRAY_TASK_ID - 1 ))
+
+echo "ID=$ID Dataset=190410" 
+
+python /mnt/home/suzuekar/ea-tpe/main.py \
+    --method TPEC \
+    --task_id 190410 \
+    --seed ${ID} \
+    --evaluations 1000 \
+    --num_cpus 24 \
+    --debug True \
+    --logdir ${RESULTS_DIR}
