@@ -1,0 +1,44 @@
+#!/bin/bash --login
+########## Define Resources Needed with SBATCH Lines ##########
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --array=1-140
+#SBATCH --cpus-per-task=24
+#SBATCH -t 24:00:00
+#SBATCH --mem=100GB
+#SBATCH --job-name=tpe
+#SBATCH -p defq
+###############################################################
+
+source ~/anaconda3/etc/profile.d/conda.sh
+conda init
+conda activate tpe-ea
+
+DATA_DIR=/mnt/home/suzuekar/ea-tpe/data/
+RESULTS_DIR=/mnt/home/suzuekar/ea-tpe/results/mut-var3/tpebo
+
+##################################
+# Treatments
+##################################
+
+DATASETS=(2073 168757 168784 190146 190410 168910 359969)
+
+ID=$(( SLURM_ARRAY_TASK_ID - 1 ))
+
+DATASET_ID=$(( ID / (20) ))
+REPLICATE=$(( ID % 20 ))
+
+DATASET=${DATASETS[$DATASET_ID]}
+
+echo "ID=$ID Method=TPEBO Dataset=$DATASET Replicate=$REPLICATE" 
+
+python /mnt/home/suzuekar/ea-tpe/main.py \
+    --method TPEBO \
+    --task_id ${DATASET} \
+    --seed ${REPLICATE} \
+    --tour_size 10 \
+    --mut_rate 1.0 \
+    --evaluations 1000 \
+    --num_cpus 24 \
+    --debug True \
+    --logdir ${RESULTS_DIR}
