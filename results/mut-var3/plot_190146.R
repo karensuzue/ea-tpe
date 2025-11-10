@@ -4,7 +4,7 @@ rm(list = ls())
 library(ggplot2)
 library(dplyr)
 
-data <- read.csv("tpebo-190146.csv")
+data <- read.csv("tpec-190146.csv")
 mutvars <- unique(data$mutv)
 print(mutvars)
 
@@ -53,7 +53,7 @@ plot <- ggplot(summary_best, aes(x = generation, y = mean_best,
     scale_color_manual(values = cb_palette, name = "Mutation Variance") +
     scale_fill_manual(values = cb_palette, name = "Mutation Variance") +
     labs(
-        title = "TPEBO on Task 190146 (Mean with SE)",
+        title = "TPEC on Task 190146 (Mean with SE)",
         x = "Evaluations",
         y = "Best Training Accuracy"
     ) +
@@ -71,7 +71,7 @@ plot <- ggplot(summary_avg, aes(x = generation, y = mean_avg,
     scale_color_manual(values = cb_palette, name = "Mutation Variance") +
     scale_fill_manual(values = cb_palette, name = "Mutation Variance") +
     labs(
-        title = "TPEBO on Task 190146 (Mean with SE)",
+        title = "TPEC on Task 190146 (Mean with SE)",
         x = "Evaluations",
         y = "Average Training Accuracy"
     ) +

@@ -1,7 +1,7 @@
 """
 Script to compile generational data from running
 TPEBO with mutation variances 0.45 and 0.5 on task 190146.
-Produces "tpebo-190146.csv" with the following structure:
+Produces "tpec-190146.csv" with the following structure:
 
     replicate,mutv,generation,evaluation,best,average,median,std
 
@@ -65,6 +65,6 @@ if __name__ == "__main__":
         all_data = all_data[["replicate", "mutv", "generation", 
                              "evaluation", "best", "average", 
                              "median", "std"]]
-        all_data.to_csv("tpebo-190146.csv", index=False)
+        all_data.to_csv("tpec-190146.csv", index=False)
     else:
         print("No valid log files found?")
