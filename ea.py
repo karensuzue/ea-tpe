@@ -23,7 +23,7 @@ class EA:
         self.logger = logger
 
         self.param_space = param_space
-
+        
         self.population: List[Individual] = []
 
         # For debugging

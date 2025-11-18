@@ -5,6 +5,7 @@ from ray import ObjectRef
 from config import Config
 from logger import Logger
 from typing import List, Dict
+from typeguard import typechecked
 from ea import EA
 from tpe import TPE
 from individual import Individual
@@ -12,6 +13,8 @@ from param_space import ModelParams
 from utils import eval_final_factory, remove_failed_individuals, process_population_for_best, evaluation
 from sklearn.model_selection import KFold
 
+
+@typechecked
 class TPEC:
     def __init__(self, config: Config, logger: Logger, param_space: ModelParams):
         self.config = config
@@ -144,8 +147,8 @@ class TPEC:
                 ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
             tpe_archive += tpe_population
 
-            assert((gen + 2) * self.config.pop_size == len(tpe_archive),
-                   f'Expected { (gen + 2) * self.config.pop_size } individuals in TPE archive, but found { len(tpe_archive) }.')
+            assert (gen + 2) * self.config.pop_size == len(tpe_archive), \
+                   f'Expected { (gen + 2) * self.config.pop_size } individuals in TPE archive, but found { len(tpe_archive) }.'
 
         # randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."

@@ -46,7 +46,7 @@ class MultivariateKDE:
     def __repr__(self):
         return f"MultivariateKDE(dims={self.kde.d}, samples={self.kde.n})"
 
-    def pdf(self, vec: Union[np.ndarray, List]):
+    def pdf(self, vec: Union[np.ndarray, List]) -> np.ndarray:
         """
         Evaluate the KDE probability density function at given points.
 
@@ -61,14 +61,15 @@ class MultivariateKDE:
         # Returns an array of shape (m,), corresponding to 1 density value per point
         return np.maximum(self.kde.pdf(vec), self.eps)
 
-    def sample(self, rng: np.random.default_rng, n_samples = 1) -> np.ndarray:
+    def sample(self, rng: np.random.default_rng, n_samples: int = 1) -> np.ndarray:
         """
-        Sample n new points from the estimated distribution.
+        Sample 'n_samples' new points from the estimated distribution.
         Returns a matrix of shape (dimensions, n_samples)
         """
         # For reproducibility, pull an int seed from the generator
         return self.kde.resample(size=n_samples, seed=rng) # shape (dimensions, n_samples)
 
+@typechecked
 class CategoricalPMF:
     """
     Categorical probability mass function with Laplace smoothing to avoid zero probabilities.
@@ -76,14 +77,14 @@ class CategoricalPMF:
     ensuring all categories have non-zero likelihood (with smoothing factor 'alpha').
     """
 
-    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str] | Tuple[bool],
+    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str, ...] | Tuple[bool, ...],
                  alpha = 1.0):
         """
         Parameters:
         - values: Iterable[str]
             List or iterable of observed categorical values.
-        - all_categories: List[str]
-            The full list of possible categories to support in the distribution.
+        - all_categories: List[str] | List[bool] | Tuple[str] | Tuple[bool]
+            The full list (or tuple) of possible categories to support in the distribution.
         - alpha: float
             Laplace smoothing parameter. Higher values increase the uniformity of the distribution.
         """
@@ -97,7 +98,7 @@ class CategoricalPMF:
         self.prob: Dict = {c: (counts[c] + alpha) / total for c in all_categories}
         self.eps = 1e-12
 
-    def pmf(self, x):
+    def pmf(self, x) -> float:
         """
         Evaluate the smoothed probability of a category 'x' if it was part of
         'all_categories'; otherwise, returns 'self.eps' to avoid zero likelihood.
@@ -108,7 +109,7 @@ class CategoricalPMF:
         """
         return self.prob.get(x, self.eps)
 
-    def sample(self, rng: np.random.default_rng, n_samples = 1) -> List[str] | List[bool]:
+    def sample(self, rng: np.random.default_rng, n_samples: int = 1) -> List[str] | List[bool]:
         """
         Sample n categories from the categorical PMF.
 
@@ -117,13 +118,13 @@ class CategoricalPMF:
         - n_samples (int): Number of samples to draw.
 
         Returns:
-            List: List of sampled categories (length = n_samples) if n_samples > 1,
-            otherwise a single sampled value.
+            List of sampled categories (length = n_samples)
         """
         probabilities = list(self.prob.values())
         samples = rng.choice(self.all_categories, size=n_samples, p=probabilities)
         return samples.tolist()
 
+@typechecked
 class TPE(Surrogate):
     """
     Tree-structured Parzen Estimator (TPE) Solver for hyperparameter optimization.

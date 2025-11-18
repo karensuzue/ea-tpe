@@ -6,11 +6,18 @@ import numpy as np
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
 from typing import Dict, Any, Tuple, List
+from typeguard import typechecked
 from param_space import RandomForestParams, ModelParams
 from individual import Individual
 from config import Config
 
-def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
+@typechecked
+def eval_parameters_RF_final(model_params: Dict[str, Any], 
+                             X_train: np.ndarray, 
+                             y_train: np.ndarray, 
+                             X_test: np.ndarray, 
+                             y_test: np.ndarray, 
+                             seed: int) -> Tuple[float, float]:
     model = RandomForestClassifier(**model_params, random_state = seed)
     model.fit(X_train, y_train)
 
@@ -19,7 +26,11 @@ def eval_parameters_RF_final(model_params: Dict[str, Any], X_train, y_train, X_t
 
     return train_accuracy, test_accuracy
 
-def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int, n_jobs: int) -> float:
+@typechecked
+def eval_parameters_RF(model_params: Dict[str, Any], 
+                       X_train: np.ndarray, 
+                       y_train: np.ndarray, 
+                       seed: int, n_jobs: int) -> float:
     """
     Evaluates a given set of hyperparameters on cross-validated accuracy.
 
@@ -38,31 +49,52 @@ def eval_parameters_RF(model_params: Dict[str, Any], X_train, y_train, seed: int
         return 1.0  # Return a high score to avoid selecting this individual
     return -1.0 * score  # minimizes
 
-def eval_final_factory(model: str, model_params: Dict[str, Any], X_train, y_train, X_test, y_test, seed: int) -> Tuple[float, float]:
+@typechecked
+def eval_final_factory(model: str, 
+                       model_params: Dict[str, Any], 
+                       X_train: np.ndarray, 
+                       y_train: np.ndarray, 
+                       X_test: np.ndarray, 
+                       y_test: np.ndarray, 
+                       seed: int) -> Tuple[float, float]:
     if model == 'RF':
         # print("Final evaluations for RF") # debug
         return eval_parameters_RF_final(model_params, X_train, y_train, X_test, y_test, seed)
+    # elif model == 'HGBoost':
+    #     return 
     else:
         raise ValueError(f"Unsupported model: {model}")
 
-def eval_factory(model: str, model_params: Dict[str, Any], X_train, y_train,
-                    seed: int, n_jobs: int) -> float:
+@typechecked
+def eval_factory(model: str, 
+                 model_params: Dict[str, Any], 
+                 X_train: np.ndarray, 
+                 y_train: np.ndarray,
+                 seed: int, n_jobs: int) -> float:
     if model == 'RF':
         return eval_parameters_RF(model_params, X_train, y_train, seed, n_jobs)
+    # elif model == 'HGBoost':
+    #     return 
     else:
         raise ValueError(f"Unsupported model: {model}")
 
+@typechecked
 def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
     if model == 'RF':
         # print("RF Parameter space chosen.") # debug
         return RandomForestParams(rng)
-    # elif model == 'XGBoost': # TENTATIVE
-    #     return XGBoostParams(seed)
+    # elif model == 'XGBoost': 
+    #     return XGBoostParams(rng)
     else:
         raise ValueError(f"Unsupported model: {model}")
-
+    
 @ray.remote
-def ray_RF_eval(model_params: Dict[str, Any], X_train, y_train, train_split, validation_split, seed: int, id: int) -> Tuple[float, int, float]:
+def ray_RF_eval(model_params: Dict[str, Any], 
+                X_train: np.ndarray, 
+                y_train: np.ndarray, 
+                train_split,
+                validation_split, 
+                seed: int, id: int) -> Tuple[float, int, float]:
     # initialize the RF model
     model = RandomForestClassifier(**model_params, random_state=seed)
 
@@ -78,7 +110,13 @@ def ray_RF_eval(model_params: Dict[str, Any], X_train, y_train, train_split, val
         return -1.0, id, -1.0
 
 # function to take in a population, X and y train ray ids, and cross-validation splits to parallel evaluate the population
-def evaluation(population: List[Individual], X_train: ray.ObjectID, y_train: ray.ObjectID, cv_splits: List, model: str, seed: int) -> None:
+@typechecked
+def evaluation(population: List[Individual], 
+               X_train: ray.ObjectID, 
+               y_train: ray.ObjectID, 
+               cv_splits: List, 
+               model: str, 
+               seed: int) -> None:
     # create a dictionary to hold each individual's in the population scores across each fold
     individual_scores = {i: {'cv': [], 'error': False} for i in range(len(population))}
 
@@ -109,8 +147,12 @@ def evaluation(population: List[Individual], X_train: ray.ObjectID, y_train: ray
             individual.set_performance(np.mean(individual_scores[i]['cv']))
     return
 
+
 #https://github.com/automl/ASKL2.0_experiments/blob/84a9c0b3af8f7ac6e2a003d4dea5e6dce97d4315/experiment_scripts/utils.py
-def load_task(task_id: int, data_dir: str, preprocess=True):
+@typechecked
+def load_task(task_id: int, 
+              data_dir: str, 
+              preprocess=True) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Loads and splits the chosen task.
     Project must include 'data' directory, which stores a set of
@@ -127,6 +169,7 @@ def load_task(task_id: int, data_dir: str, preprocess=True):
     return X_train, y_train, X_test, y_test
 
 # remove any individuals wiht a positive performance
+@typechecked
 def remove_failed_individuals(population: List[Individual], config: Config) -> List[Individual]:
     """
     Removes individuals with a positive performance from the population.
@@ -139,6 +182,7 @@ def remove_failed_individuals(population: List[Individual], config: Config) -> L
     return population
 
 # return the best training performance from the population
+@typechecked
 def get_best_performance(population: List[Individual]) -> float:
     """
     Returns the best training performance from the population.
@@ -148,7 +192,10 @@ def get_best_performance(population: List[Individual]) -> float:
     return min([ind.get_performance() for ind in population])
 
 # process the current population and update self.best_performers and self.best_performance
-def process_population_for_best(population: List[Individual], best_performance: float, best_performers: List[Dict]) -> Tuple[float, List[Dict]]:
+@typechecked
+def process_population_for_best(population: List[Individual], 
+                                best_performance: float, 
+                                best_performers: List[Dict[str, Any]]) -> Tuple[float, List[Dict[str, Any]]]:
     """
     Processes the current population and updates self.best_performers and self.best_performance.
     """

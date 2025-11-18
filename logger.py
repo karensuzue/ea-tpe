@@ -4,7 +4,9 @@ import json
 from config import Config
 from individual import Individual
 from typing import List, Dict
+from typeguard import typechecked
 
+@typechecked
 class Logger:
     def __init__(self, logdir: str):
         self.logdir = logdir

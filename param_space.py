@@ -23,6 +23,7 @@ class BoolParam(TypedDict):
     bounds: Tuple[bool, bool]
     type: Literal["bool"]
 
+
 # ParamSpec can be one of IntParam, FloatParam, CatParam, and BoolParam
 ParamSpec = Union[IntParam, FloatParam, CatParam, BoolParam]
 # Dictionary where each key is a parameter name, and each value is exactly one of the 3 kinds of ParamSpecs
@@ -125,20 +126,21 @@ class ModelParams(ABC):
         pass
 
 # create a RandomForest subclass that inherits from ModelParams
+@typechecked
 class RandomForestParams(ModelParams):
     def __init__(self, rng: np.random.default_rng, offset: float = 1e-6):
         self.rng = rng
 
         self.param_space =  {
-            'n_estimators': {'bounds': (10, 1000), 'type': 'int'}, # int
-            'criterion': {'bounds': ('gini', 'entropy', 'log_loss'), 'type': 'cat'}, # categorical
-            'max_depth': {'bounds': (1, 30), 'type': 'int'}, # int
-            'min_samples_split': {'bounds': (.001, 1.0 - offset), 'type': 'float'}, # float
-            'min_samples_leaf': {'bounds': (.001, 1.0 - offset), 'type': 'float'}, # float
-            'max_features': {'bounds': (.001, 1.0 - offset), 'type': 'float'}, # float
-            'max_leaf_nodes': {'bounds': (2, 1000), 'type': 'int'}, # int
-            'bootstrap': {'bounds': (True, False), 'type': 'bool'},  # boolean
-            'max_samples': {'bounds': (.001, 1.0 - offset), 'type': 'float'},  # float
+            'n_estimators': IntParam(bounds=(10, 1000), type='int'), # int
+            'criterion': CatParam(bounds=('gini', 'entropy', 'log_loss'), type='cat'), # categorical
+            'max_depth': IntParam(bounds=(1, 30), type='int'), # int
+            'min_samples_split': FloatParam(bounds=(.001, 1.0 - offset), type='float'), # float
+            'min_samples_leaf': FloatParam(bounds=(.001, 1.0 - offset), type='float'), # float
+            'max_features': FloatParam(bounds=(.001, 1.0 - offset), type='float'), # float
+            'max_leaf_nodes': IntParam(bounds=(2, 1000), type='int'), # int
+            'bootstrap': BoolParam(bounds=(True, False), type='bool'),  # boolean
+            'max_samples': FloatParam(bounds=(.001, 1.0 - offset), type='float'),  # float
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
