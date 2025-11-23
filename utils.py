@@ -4,12 +4,13 @@ import copy
 import ray
 import numpy as np
 from sklearn.model_selection import cross_val_score, StratifiedKFold
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import LinearSVC
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, GradientBoostingClassifier
+from sklearn.svm import LinearSVC, SVC
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import SGDClassifier
 from typing import Dict, Any, Tuple, List
 from typeguard import typechecked
-from param_space import DecisionTreeParams, LinearSVCParams, RandomForestParams, ModelParams
+from param_space import LinearSGDParams, GradientBoostParams, ExtraTreesParams, KernelSVCParams, DecisionTreeParams, LinearSVCParams, RandomForestParams, ModelParams
 from individual import Individual
 from config import Config
 
@@ -37,6 +38,14 @@ def evaluation(population: List[Individual],
                 ray_jobs.append(ray_LSVC_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
             elif model == 'DT':
                 ray_jobs.append(ray_DT_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
+            elif model == 'KSVC':
+                ray_jobs.append(ray_KSVC_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
+            elif model == 'ET':
+                ray_jobs.append(ray_ET_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
+            elif model == 'GB':
+                ray_jobs.append(ray_GB_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
+            elif model == 'LSGD':
+                ray_jobs.append(ray_LSGD_eval.remote(individual.get_params(), X_train, y_train, train_split, validation_split, seed, i))
             else:
                 raise ValueError(f"Unsupported model: {model}")
 
@@ -75,11 +84,19 @@ def eval_final_factory(model: str,
         return eval_parameters_LSVC_final(model_params, X_train, y_train, X_test, y_test, seed)
     elif model == 'DT':
         return eval_parameters_DT_final(model_params, X_train, y_train, X_test, y_test, seed)
+    elif model == 'KSVC':
+        return eval_parameters_KSVC_final(model_params, X_train, y_train, X_test, y_test, seed)
+    elif model == 'ET':
+        return eval_parameters_ET_final(model_params, X_train, y_train, X_test, y_test, seed)
+    elif model == 'GB':
+        return eval_parameters_GB_final(model_params, X_train, y_train, X_test, y_test, seed)
+    elif model == 'LSGD':
+        return eval_parameters_LSGD_final(model_params, X_train, y_train, X_test, y_test, seed)
     else:
         raise ValueError(f"Unsupported model: {model}")
 
 @typechecked
-def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
+def param_space_factory(model: str, rng: np.random.default_rng, num_cpus: int) -> ModelParams:
     if model == 'RF':
         # print("RF Parameter space chosen.") # debug
         return RandomForestParams(rng)
@@ -87,6 +104,14 @@ def param_space_factory(model: str, rng: np.random.default_rng) -> ModelParams:
         return LinearSVCParams(rng)
     elif model == 'DT':
         return DecisionTreeParams(rng)
+    elif model == 'KSVC':
+        return KernelSVCParams(rng)
+    elif model == 'ET':
+        return ExtraTreesParams(rng)
+    elif model == 'GB':
+        return GradientBoostParams(rng)
+    elif model == 'LSGD':
+        return LinearSGDParams(rng, num_cpus)
     else:
         raise ValueError(f"Unsupported model: {model}")
     
@@ -209,6 +234,7 @@ def ray_LSVC_eval(model_params: Dict[str, Any],
         # failed
         return -1.0, id, -1.0, str(e)
 
+
 ###########################################################
 #                      DECISION TREE                      #
 ###########################################################
@@ -251,8 +277,164 @@ def ray_DT_eval(model_params: Dict[str, Any],
 
 
 ###########################################################
-#                       KERNEL SVM                        #
+#                       KERNEL SVC                        #
 ###########################################################
+@typechecked
+def eval_parameters_KSVC_final(model_params: Dict[str, Any], 
+                             X_train: np.ndarray, 
+                             y_train: np.ndarray, 
+                             X_test: np.ndarray, 
+                             y_test: np.ndarray, 
+                             seed: int) -> Tuple[float, float]:
+    model = SVC(**model_params, random_state=seed)
+    model.fit(X_train, y_train)
+
+    train_accuracy = model.score(X_train, y_train)
+    test_accuracy = model.score(X_test, y_test)
+
+    return train_accuracy, test_accuracy
+
+@ray.remote
+def ray_KSVC_eval(model_params: Dict[str, Any], 
+                X_train: np.ndarray, 
+                y_train: np.ndarray, 
+                train_split,
+                validation_split, 
+                seed: int, id: int) -> Tuple[float, int, float]:
+    
+    # initialize the RF model
+    model = SVC(**model_params, random_state=seed)
+
+    # try to fit
+    try:
+        # fit model on training data split
+        model.fit(X_train[train_split], y_train[train_split])
+        accuracy = model.score(X_train[validation_split], y_train[validation_split])
+        return -1.0 * float(accuracy), id, 1.0, None
+
+    except Exception as e:
+        # failed
+        return -1.0, id, -1.0, str(e)
+
+
+###########################################################
+#                      EXTRA TREES                        #
+###########################################################
+@typechecked
+def eval_parameters_ET_final(model_params: Dict[str, Any], 
+                             X_train: np.ndarray, 
+                             y_train: np.ndarray, 
+                             X_test: np.ndarray, 
+                             y_test: np.ndarray, 
+                             seed: int) -> Tuple[float, float]:
+    model = ExtraTreesClassifier(**model_params, random_state=seed)
+    model.fit(X_train, y_train)
+
+    train_accuracy = model.score(X_train, y_train)
+    test_accuracy = model.score(X_test, y_test)
+
+    return train_accuracy, test_accuracy
+
+@ray.remote
+def ray_ET_eval(model_params: Dict[str, Any], 
+                X_train: np.ndarray, 
+                y_train: np.ndarray, 
+                train_split,
+                validation_split, 
+                seed: int, id: int) -> Tuple[float, int, float]:
+    
+    # initialize the RF model
+    model = ExtraTreesClassifier(**model_params, random_state=seed)
+
+    # try to fit
+    try:
+        # fit model on training data split
+        model.fit(X_train[train_split], y_train[train_split])
+        accuracy = model.score(X_train[validation_split], y_train[validation_split])
+        return -1.0 * float(accuracy), id, 1.0, None
+
+    except Exception as e:
+        # failed
+        return -1.0, id, -1.0, str(e)
+
+
+
+@typechecked
+def eval_parameters_GB_final(model_params: Dict[str, Any], 
+                             X_train: np.ndarray, 
+                             y_train: np.ndarray, 
+                             X_test: np.ndarray, 
+                             y_test: np.ndarray, 
+                             seed: int) -> Tuple[float, float]:
+    model = GradientBoostingClassifier(**model_params, random_state=seed)
+    model.fit(X_train, y_train)
+
+    train_accuracy = model.score(X_train, y_train)
+    test_accuracy = model.score(X_test, y_test)
+
+    return train_accuracy, test_accuracy
+
+@ray.remote
+def ray_GB_eval(model_params: Dict[str, Any], 
+                X_train: np.ndarray, 
+                y_train: np.ndarray, 
+                train_split,
+                validation_split, 
+                seed: int, id: int) -> Tuple[float, int, float]:
+    
+    # initialize the RF model
+    model = GradientBoostingClassifier(**model_params, random_state=seed)
+
+    # try to fit
+    try:
+        # fit model on training data split
+        model.fit(X_train[train_split], y_train[train_split])
+        accuracy = model.score(X_train[validation_split], y_train[validation_split])
+        return -1.0 * float(accuracy), id, 1.0, None
+
+    except Exception as e:
+        # failed
+        return -1.0, id, -1.0, str(e)
+
+
+
+
+@typechecked
+def eval_parameters_LSGD_final(model_params: Dict[str, Any], 
+                             X_train: np.ndarray, 
+                             y_train: np.ndarray, 
+                             X_test: np.ndarray, 
+                             y_test: np.ndarray, 
+                             seed: int) -> Tuple[float, float]:
+    model = SGDClassifier(**model_params, random_state=seed)
+    model.fit(X_train, y_train)
+
+    train_accuracy = model.score(X_train, y_train)
+    test_accuracy = model.score(X_test, y_test)
+
+    return train_accuracy, test_accuracy
+
+@ray.remote
+def ray_LSGD_eval(model_params: Dict[str, Any], 
+                X_train: np.ndarray, 
+                y_train: np.ndarray, 
+                train_split,
+                validation_split, 
+                seed: int, id: int) -> Tuple[float, int, float]:
+    
+    # initialize the RF model
+    model = SGDClassifier(**model_params, random_state=seed)
+
+    # try to fit
+    try:
+        # fit model on training data split
+        model.fit(X_train[train_split], y_train[train_split])
+        accuracy = model.score(X_train[validation_split], y_train[validation_split])
+        return -1.0 * float(accuracy), id, 1.0, None
+
+    except Exception as e:
+        # failed
+        return -1.0, id, -1.0, str(e)
 
 
 ###########################################################

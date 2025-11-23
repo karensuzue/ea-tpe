@@ -174,7 +174,6 @@ class BO:
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}", flush=True)
             print(f"Soft evaluations {self.soft_eval_count}", flush=True)
-            # TODO: Will not be equal for LSVC
             assert(len(self.samples) == self.config.evaluations)
 
         ray.shutdown()

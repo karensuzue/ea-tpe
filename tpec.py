@@ -147,9 +147,6 @@ class TPEC:
                 ind.set_params(self.param_space.tpe_parameters(ind.get_params()))
             tpe_archive += tpe_population
 
-            # TODO: Figure out how to best handle this issue. For certain models, this condition will not be true, 
-            # as individuals with positive performance are found, and the population size will shrink
-            # I believe this assertion can be discarded
             assert (gen + 2) * self.config.pop_size == len(tpe_archive), \
                    f'Expected { (gen + 2) * self.config.pop_size } individuals in TPE archive, but found { len(tpe_archive) }.'
 
