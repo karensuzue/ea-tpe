@@ -88,8 +88,6 @@ class BO:
         evaluation(self.samples, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
         if self.config.debug: self.hard_eval_count += len(self.samples)
 
-        # Remove individuals with positive performance in sample set
-        self.samples = remove_failed_individuals(self.samples, self.config)
         # Update best performance and set of best performers in the current sample set
         self.best_performance, self.best_performers = process_population_for_best(self.samples, self.best_performance, self.best_performers)
         print(f"Initial sample size: {len(self.samples)}", flush=True)
@@ -104,6 +102,9 @@ class BO:
             tpe_samples.append(Individual(params=self.param_space.tpe_parameters(ind.get_params()),
                                           performance=copy.deepcopy(ind.get_performance())))
         assert len(tpe_samples) == len(self.samples), "TPE samples size mismatch."
+
+        # Remove individuals with positive performance in sample set
+        self.samples = remove_failed_individuals(self.samples, self.config)
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
@@ -173,6 +174,7 @@ class BO:
         if self.config.debug:
             print(f"Hard evaluations: {self.hard_eval_count}", flush=True)
             print(f"Soft evaluations {self.soft_eval_count}", flush=True)
+            # TODO: Will not be equal for LSVC
             assert(len(self.samples) == self.config.evaluations)
 
         ray.shutdown()

@@ -30,7 +30,7 @@ def main():
                         help = "Enable debug mode for development; runs may take longer.")
     parser.add_argument("--method", type = str, choices = ['EA', 'TPEBO', 'TPEC'], default = 'TPEC',
                         help = "Hyperparameter tuning method to use.")
-    parser.add_argument("--model", type = str, choices = ['RF', 'XGB'], default = 'RF',
+    parser.add_argument("--model", type = str, choices = ['RF', 'LSVC', 'DT', 'KSVM', 'ET', 'GB', 'LSGD'], default = 'RF',
                         help = "Model to be used.")
     parser.add_argument("--num_cpus", type = int, default = 1,
                         help = "The number of CPU cores to use for multiprocessing")

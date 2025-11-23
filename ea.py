@@ -119,7 +119,7 @@ class EA:
         if self.config.debug: self.hard_eval_count += len(self.population)
 
         # Remove individuals with positive performance
-        self.population = remove_failed_individuals(self.population, self.config)
+        # self.population = remove_failed_individuals(self.population, self.config)
         self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
         print(f"Initial population size: {len(self.population)}", flush=True)
         print(f"Best training performance so far: {self.best_performance}", flush=True)
