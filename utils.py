@@ -3,6 +3,7 @@ import pickle
 import copy
 import ray
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, GradientBoostingClassifier
 from sklearn.svm import LinearSVC, SVC
@@ -96,7 +97,7 @@ def eval_final_factory(model: str,
         raise ValueError(f"Unsupported model: {model}")
 
 @typechecked
-def param_space_factory(model: str, rng: np.random.default_rng, num_cpus: int) -> ModelParams:
+def param_space_factory(model: str, rng: np.random.default_rng, num_cpus: int, classes: int) -> ModelParams:
     if model == 'RF':
         # print("RF Parameter space chosen.") # debug
         return RandomForestParams(rng)
@@ -109,7 +110,7 @@ def param_space_factory(model: str, rng: np.random.default_rng, num_cpus: int) -
     elif model == 'ET':
         return ExtraTreesParams(rng)
     elif model == 'GB':
-        return GradientBoostParams(rng)
+        return GradientBoostParams(rng, classes=classes)
     elif model == 'LSGD':
         return LinearSGDParams(rng, num_cpus)
     else:
@@ -358,7 +359,9 @@ def ray_ET_eval(model_params: Dict[str, Any],
         return -1.0, id, -1.0, str(e)
 
 
-
+###########################################################
+#                     GRADIENT BOOST                      #
+###########################################################
 @typechecked
 def eval_parameters_GB_final(model_params: Dict[str, Any], 
                              X_train: np.ndarray, 
@@ -397,8 +400,9 @@ def ray_GB_eval(model_params: Dict[str, Any],
         return -1.0, id, -1.0, str(e)
 
 
-
-
+###########################################################
+#                      LINEAR SGD                         #
+###########################################################
 @typechecked
 def eval_parameters_LSGD_final(model_params: Dict[str, Any], 
                              X_train: np.ndarray, 
@@ -459,6 +463,21 @@ def load_task(task_id: int,
         exit(0)
 
     return X_train, y_train, X_test, y_test
+
+@typechecked
+def get_task_info(task_id: int, data_dir: str) -> Tuple[int, int, int]:
+    task_list_path = f"{data_dir}/task_list.csv"
+    if os.path.exists(task_list_path):
+        tasks = pd.read_csv(task_list_path)
+        row = tasks[tasks['task_id'] == task_id]
+        if row.empty:
+            raise ValueError(f"Task ID {task_id} not found in {task_list_path}")
+        row = row.iloc[0]
+        features, rows, classes = row["features"], row["rows"], row["classes"]
+    else:
+        print(f'Task list not found in {data_dir}')
+        exit(0)
+    return int(features), int(rows), int(classes)
 
 # remove any individuals wiht a positive performance
 @typechecked

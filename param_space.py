@@ -16,7 +16,7 @@ class FloatParam(TypedDict):
     type: Literal["float"]
 
 class CatParam(TypedDict):
-    bounds: Tuple[str, ...]
+    bounds: Tuple[str | None, ...]
     type: Literal["cat"]
 
 class BoolParam(TypedDict):
@@ -153,6 +153,7 @@ class RandomForestParams(ModelParams):
             'max_leaf_nodes': IntParam(bounds=(2, 1000), type='int'), # int
             'bootstrap': BoolParam(bounds=(True, False), type='bool'),  # boolean
             'max_samples': FloatParam(bounds=(.001, 1.0 - offset), type='float'),  # float
+            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat')
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
@@ -257,16 +258,17 @@ class LinearSVCParams(ModelParams):
     def __init__(self, rng: np.random.default_rng):
         self.rng = rng
 
+        # Bounds taken from TPOT
         self.param_space = {
             'penalty': CatParam(bounds=('l1', 'l2'), type='cat'),
             'loss': CatParam(bounds=('hinge', 'squared_hinge'), type='cat'),
             'dual': BoolParam(bounds=(True, False), type='bool'),
-            'tol': FloatParam(bounds=(1e-5, 1e-1), type='float'),
+            'tol': FloatParam(bounds=(.001, 1e-1), type='float'),
             'C': FloatParam(bounds=(0.01, 1e5), type='float'),
-            # 'multi_class': CatParam(bounds=('ovr', 'crammer_singer'), type='cat'),
             'fit_intercept': BoolParam(bounds=(True, False), type='bool'),
             'intercept_scaling': FloatParam(bounds=(0.1, 10.0), type='float'),
-            # 'max_iter': IntParam(bounds=(20000, 20000), type='int') # doesn't usually reach convergence if 1000 by default
+            'max_iter': IntParam(bounds=(1000, 10000), type='int'), # doesn't usually reach convergence if 1000 by default
+            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat')
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
     
@@ -290,7 +292,7 @@ class LinearSVCParams(ModelParams):
                 rand_genotype[param_name] = self.rng.choice(spec["bounds"])
             else:
                 raise ValueError(f"Unsupported parameter type: {spec['type']}")
-        rand_genotype['max_iter'] = 20000
+        # rand_genotype['max_iter'] = 20000
         # Fix the parameters to ensure they are valid
         self.variation_fix_parameters(rand_genotype)
         return rand_genotype
@@ -347,7 +349,9 @@ class DecisionTreeParams(ModelParams):
             'min_samples_split': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
             'min_samples_leaf': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
             'max_features': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
-            'min_weight_fraction_leaf': FloatParam(bounds=(.0, .5), type='float')
+            'min_weight_fraction_leaf': FloatParam(bounds=(.0, .5), type='float'),
+            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat'),
+            'max_leaf_nodes': IntParam(bounds=(2, 1000), type='int')
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
@@ -415,9 +419,13 @@ class KernelSVCParams(ModelParams):
             'C': FloatParam(bounds=(0.01, 1e5), type='float'),
             'kernel': CatParam(bounds=('linear', 'poly', 'rbf', 'sigmoid'), type='cat'),
             'degree': IntParam(bounds=(1, 5), type='int'),
-            'gamma': FloatParam(bounds=(1e-5, 8), type='float'),
+            'gamma': CatParam(bounds=('scale', 'auto'), type='cat'),
             'coef0': FloatParam(bounds=(-1.0, 1.0), type='float'),
-            'shrinking': BoolParam(bounds=(True, False), type='bool')
+            'shrinking': BoolParam(bounds=(True, False), type='bool'),
+            'tol': FloatParam(bounds=(.001, 1e-1), type='float'),
+            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat'),
+            'max_iter': IntParam(bounds=(1000, 10000), type='int'),
+            'decision_function_shape': CatParam(bounds=('ovo', 'ovr'), type='cat')
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
@@ -492,7 +500,8 @@ class ExtraTreesParams(ModelParams):
             'max_features': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
             'max_leaf_nodes': IntParam(bounds=(2, 1000), type='int'),
             'bootstrap': BoolParam(bounds=(True, False), type='bool'),
-            'max_samples': FloatParam(bounds=(.001, 1.0 - offset), type='float')
+            'max_samples': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
+            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat'),
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 
@@ -594,19 +603,25 @@ class ExtraTreesParams(ModelParams):
 
 @typechecked
 class GradientBoostParams(ModelParams):
-    def __init__(self, rng: np.random.default_rng, offset: float = 1e-6):
+    def __init__(self, rng: np.random.default_rng, classes: int, offset: float = 1e-6):
         self.rng = rng
+        self.classes = classes
 
         self.param_space = {
-            'learning_rate': FloatParam(bounds=(1e-3, 1.0), type='float'),
+            'loss': CatParam(bounds=('log_loss', 'exponential'), type='cat'),
+            'learning_rate': FloatParam(bounds=(1e-3, 10.0), type='float'),
             'n_estimators': IntParam(bounds=(10, 1000), type='int'), # TODO: large numbers usually results in better performance?
             'subsample': FloatParam(bounds=(.001, 1.0), type='float'),
             'min_samples_split': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
             'min_samples_leaf': FloatParam(bounds=(.001, 1.0 - offset), type='float'),
             'min_weight_fraction_leaf': FloatParam(bounds=(.0, .5), type='float'),
-            'max_features': FloatParam(bounds=(0.01, 1.00), type='float'),
-            'max_leaf_nodes': IntParam(bounds=(3, 2047), type='int')
-            # TODO: 'max_depth': IntParam # bounds=(1, 2*n_features)??
+            'max_features': FloatParam(bounds=(.01, 1.00), type='float'),
+            'max_leaf_nodes': IntParam(bounds=(2, 1000), type='int'),
+            'criterion': CatParam(bounds=('friedman_mse', 'squared_error'), type='cat'),
+            'max_depth': IntParam(bounds=(1, 30), type='int'),
+            # 'validation_fraction': FloatParam(bounds=(.05, 0.5), type='float'), # TODO: earlier it was .001, 1.0 - offset, causes issues
+            'n_iter_no_change': IntParam(bounds=(1, 100), type='int')
+            # 'tol': FloatParam(bounds=(.001, 1e-1), type='float')
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
     
@@ -659,6 +674,15 @@ class GradientBoostParams(ModelParams):
         return
 
     def variation_fix_parameters(self, model_params: Dict[str, Any]) -> None:
+        # loss='exponential' is only suitable for a binary classification problem
+        if self.classes > 2 and model_params['loss'] == 'exponential':
+            model_params["loss"] = "log_loss"
+        return
+    
+    def eval_parameters(self, model_params: Dict[str, Any]) -> None:
+        """ Fixes parameters (in-place) that do not align with scikit-learn's requirements. """
+        if self.classes > 2 and model_params['loss'] == 'exponential':
+            model_params["loss"] = "log_loss"
         return
     
     def tpe_parameters(self, model_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -668,25 +692,25 @@ class GradientBoostParams(ModelParams):
 
 @typechecked
 class LinearSGDParams(ModelParams):
-    def __init__(self, rng: np.random.default_rng, num_cpus: int):
+    def __init__(self, rng: np.random.default_rng, num_cpus: int, offset: float = 1e-6):
         self.rng = rng
         self.num_cpus = num_cpus
-        # FROM TPOT:
-        # 'loss': Categorical("loss", ['modified_huber']), 
-        #don't include hinge because we have LinearSVC, don't include log because we have LogisticRegression. TODO 'squared_hinge'? doesn't support predict proba
 
         # set n_jobs to num_cpus
         self.param_space = {
-            # 'loss': CatParam(bounds=('hinge', 'log_loss', 'modified_huber'), type='cat'),
-            'penalty': CatParam(bounds=('l2', 'l1', 'elasticnet'), type='cat'),
+            'loss': CatParam(bounds=('hinge', 'log_loss', 'modified_huber', 'squared_hinge', 'perceptron'), type='cat'),
+            'penalty': CatParam(bounds=('l2', 'l1', 'elasticnet', None), type='cat'),
             'alpha': FloatParam(bounds=(1e-5, 0.01), type='float'),
             'l1_ratio': FloatParam(bounds=(0.0, 1.0), type='float'),
             'fit_intercept': BoolParam(bounds=(True, False), type='bool'),
-            'epsilon': FloatParam(bounds=(0.0, 3.0), type='float'),
             'eta0': FloatParam(bounds=(0.01, 1.0), type='float'),
             'learning_rate': CatParam(bounds=('constant', 'optimal', 'invscaling', 'adaptive'), type='cat'),
-            'power_t': FloatParam(bounds=(1e-5, 100.0), type='float'),
-            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat')
+            'class_weight': CatParam(bounds=(None, 'balanced'), type='cat'),
+            'max_iter': IntParam(bounds=(1000, 10000), type='int'),
+            'tol': FloatParam(bounds=(.001, 1e-1), type='float'),
+            'early_stopping': BoolParam(bounds=(True, False), type='bool'),
+            'validation_fraction': FloatParam(bounds=(.05, 0.5), type='float'),
+            'n_iter_no_change': IntParam(bounds=(1, 100), type='int'),
         }
         super().__init__(param_space=self.param_space, rng=self.rng)
 

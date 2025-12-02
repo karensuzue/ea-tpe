@@ -31,10 +31,12 @@ class Logger:
         self.best_ind = best_ind
         best_params = self.best_ind.get_params()
 
-        # Boolean values can't be written to JSON, so we convert them to type string
+        # Boolean/None values can't be written to JSON, so we convert them to type string
         for name, val in best_params.items():
             if isinstance(val, (bool, np.bool_)):
                 best_params[name] = str(val)
+            if val == None:
+                best_params[name] = "None"
 
         self.best_ind_data = {
             "dataset": config.task_id,

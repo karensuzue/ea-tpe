@@ -6,7 +6,7 @@ from logger import Logger
 from ea import EA
 from bo import BO
 from tpec import TPEC
-from utils import load_task, param_space_factory
+from utils import load_task, param_space_factory, get_task_info
 
 def main():
     parser = argparse.ArgumentParser()
@@ -42,7 +42,8 @@ def main():
 
     rng_ = np.random.default_rng(args.seed)
     X_train, y_train, X_test, y_test = load_task(task_id = args.task_id, data_dir = "data")
-    param_space = param_space_factory(args.model, rng_, args.num_cpus)
+    _, _, classes = get_task_info(task_id = args.task_id, data_dir = "data")
+    param_space = param_space_factory(args.model, rng_, args.num_cpus, classes)
 
     config = Config(
         seed = args.seed,

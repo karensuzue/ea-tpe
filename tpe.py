@@ -77,7 +77,7 @@ class CategoricalPMF:
     ensuring all categories have non-zero likelihood (with smoothing factor 'alpha').
     """
 
-    def __init__(self, values: Iterable[str], all_categories: List[str] | List[bool] | Tuple[str, ...] | Tuple[bool, ...],
+    def __init__(self, values: Iterable[str | bool | None], all_categories: Iterable[str | bool | None],
                  alpha = 1.0):
         """
         Parameters:
@@ -109,7 +109,7 @@ class CategoricalPMF:
         """
         return self.prob.get(x, self.eps)
 
-    def sample(self, rng: np.random.default_rng, n_samples: int = 1) -> List[str] | List[bool]:
+    def sample(self, rng: np.random.default_rng, n_samples: int = 1) -> List[str | bool | None]:
         """
         Sample n categories from the categorical PMF.
 
