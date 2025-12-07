@@ -62,7 +62,10 @@ class TPEC:
         if self.config.debug: self.hard_eval_count += len(self.population)
 
         # Remove individuals with positive performance
-        self.population = remove_failed_individuals(self.population, self.config)
+        self.population, remove_count = remove_failed_individuals(self.population, self.config)
+        # If half (or more) of population fails, terminate the run early because this shouldn't happen
+        assert remove_count < len(self.population) // 2, "Too many failed individuals!"
+
         # Update best performance and set of best performers
         self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
         print(f"Initial population size: {len(self.population)}", flush=True)
@@ -122,7 +125,6 @@ class TPEC:
 
             # Update population
             assert len(new_pop) == self.config.pop_size, f"New population size {len(new_pop)} does not match expected size {self.config.pop_size}."
-
             # set new population
             self.population = new_pop
 
@@ -132,6 +134,9 @@ class TPEC:
 
             # remove individuals with positive performance
             self.population = remove_failed_individuals(self.population, self.config)
+            # If half (or more) of population fails, terminate the run early because this shouldn't happen
+            assert remove_count < len(self.population) // 2, "Too many failed individuals!"
+
             # Update best performance and set of best performers
             self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
             print(f"Population size at gen {gen}: {len(self.population)}", flush=True)

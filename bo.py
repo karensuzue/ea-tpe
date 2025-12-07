@@ -104,7 +104,9 @@ class BO:
         assert len(tpe_samples) == len(self.samples), "TPE samples size mismatch."
 
         # Remove individuals with positive performance in sample set
-        self.samples = remove_failed_individuals(self.samples, self.config)
+        self.samples, remove_count = remove_failed_individuals(self.samples, self.config)
+        # If half (or more) of population fails, terminate the run early because this shouldn't happen
+        assert remove_count < len(self.samples) // 2, "Too many failed individuals!"
 
         generations = (self.config.evaluations - self.config.pop_size) // self.num_top_cand
         for gen in range(generations):
@@ -135,7 +137,10 @@ class BO:
             if self.config.debug: self.hard_eval_count += len(best_candidates)
 
             # remove the best candidate individuals with positive performance
-            best_candidates = remove_failed_individuals(best_candidates, self.config)
+            best_candidates, remove_count = remove_failed_individuals(best_candidates, self.config)
+            # If half (or more) of candidates fail, terminate the run early because this shouldn't happen
+            assert remove_count < len(best_candidates) // 2, "Too many failed individuals!"
+
             # Update sample set
             self.samples += best_candidates
             # Update best performance and set of best performers

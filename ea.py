@@ -118,8 +118,6 @@ class EA:
         evaluation(self.population, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
         if self.config.debug: self.hard_eval_count += len(self.population)
 
-        # Remove individuals with positive performance
-        # self.population = remove_failed_individuals(self.population, self.config)
         self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
         print(f"Initial population size: {len(self.population)}", flush=True)
         print(f"Best training performance so far: {self.best_performance}", flush=True)
@@ -136,13 +134,16 @@ class EA:
             evaluation(self.population, X_train_ref, y_train_ref, splits, self.config.model, self.config.seed)
             if self.config.debug: self.hard_eval_count += len(self.population)
 
-            # remove individuals with positive performance
-            self.population = remove_failed_individuals(self.population, self.config)
+            # Remove individuals with positive performance
+            self.population, remove_count = remove_failed_individuals(self.population, self.config)
+            # If half (or more) of population fails, terminate the run early because this shouldn't happen
+            assert remove_count < len(self.population) // 2, "Too many failed individuals!"
+
             self.best_performance, self.best_performers = process_population_for_best(self.population, self.best_performance, self.best_performers)
             print(f"Population size at gen {gen}: {len(self.population)}", flush=True)
             print(f"Best training performance so far: {self.best_performance}", flush=True)
 
-        # randomly select one of the tied best individuals
+        # Randomly select one of the tied best individuals
         assert len(self.best_performers) > 0, "No best performers found in the population."
         best_ind_params = self.config.rng.choice(self.best_performers)
 

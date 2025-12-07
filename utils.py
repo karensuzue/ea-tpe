@@ -481,16 +481,17 @@ def get_task_info(task_id: int, data_dir: str) -> Tuple[int, int, int]:
 
 # remove any individuals wiht a positive performance
 @typechecked
-def remove_failed_individuals(population: List[Individual], config: Config) -> List[Individual]:
+def remove_failed_individuals(population: List[Individual], config: Config) -> Tuple[List[Individual], int]:
     """
     Removes individuals with a positive performance from the population.
     This is useful for ensuring that only individuals with negative performance are considered.
     A positive performance indicates that the individual failed during evaluation and is not suitable for selection.
     """
+    old_pop_size = len(population)
     population = [ind for ind in population if ind.get_performance() <= 0.0]
     if config.debug:
         print(f"Removed individuals with positive performance, new population size: {len(population)}", flush=True)
-    return population
+    return population, old_pop_size - len(population)
 
 # return the best training performance from the population
 @typechecked
