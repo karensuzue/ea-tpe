@@ -133,7 +133,7 @@ class TPEC:
             if self.config.debug: self.hard_eval_count += len(self.population)
 
             # remove individuals with positive performance
-            self.population = remove_failed_individuals(self.population, self.config)
+            self.population, remove_count = remove_failed_individuals(self.population, self.config)
             # If half (or more) of population fails, terminate the run early because this shouldn't happen
             assert remove_count < len(self.population) // 2, "Too many failed individuals!"
 
